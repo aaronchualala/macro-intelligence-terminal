@@ -1,0 +1,46 @@
+{
+  "name": "macro-intelligence-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal institutional-grade macro intelligence dashboard powered by live public data sources.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "refresh": "tsx scripts/refresh.ts",
+    "refresh:tab": "tsx scripts/refresh-tab.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "fast-xml-parser": "^5.2.5",
+    "framer-motion": "^12.15.0",
+    "lucide-react": "^0.511.0",
+    "next": "16.2.6",
+    "openai": "^6.38.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "recharts": "^3.0.2",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.7",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.5",
+    "@types/react-dom": "^19.1.5",
+    "eslint": "^9.27.0",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4.1.7",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
