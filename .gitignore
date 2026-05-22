@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.env*.local
+.next
+.npm-cache
+.supabase
+.supabase-home
+supabase/.temp
+.vercel
+.vercel-cache
+.vercel-home
+.deploy-tokens.tmp
+.deploy-db-password.tmp
+.supabase-keys.tmp
+*.tmp
+tsconfig.tsbuildinfo
+node_modules
