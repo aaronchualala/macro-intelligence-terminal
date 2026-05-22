@@ -65,9 +65,53 @@ async function fetchText(url: string, timeoutMs = Number(process.env.FRED_BATCH_
   }
 }
 
+async function fetchJson<T>(url: string, timeoutMs = Number(process.env.FRED_API_TIMEOUT_MS ?? 12000)) {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Timed out after ${timeoutMs}ms fetching FRED API`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
+            Accept: "application/json"
+          },
+          cache: "no-store"
+        });
+        if (!response.ok) throw new Error(`FRED API HTTP ${response.status}`);
+        return {
+          data: await response.json() as T,
+          status: response.status,
+          retrievedAt: new Date().toISOString()
+        };
+      })(),
+      timeoutPromise
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function fredGraphUrl(ids: string[]) {
   const start = process.env.FRED_OBSERVATION_START ?? "2022-01-01";
   return `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${ids.join(",")}&cosd=${start}`;
+}
+
+function fredApiUrl(id: string, apiKey: string) {
+  const params = new URLSearchParams({
+    series_id: id,
+    api_key: apiKey,
+    file_type: "json",
+    observation_start: process.env.FRED_OBSERVATION_START ?? "2022-01-01"
+  });
+  return `https://api.stlouisfed.org/fred/series/observations?${params.toString()}`;
 }
 
 function sourceCitation(config: SeriesConfig, retrievedAt: string, sourceUrl: string, metadata: Record<string, unknown>): Citation {
@@ -93,23 +137,44 @@ function flattenPanelConfigs(panels: PanelConfig[]): PanelConfig[] {
   return panels.flatMap((panel) => [panel, ...flattenPanelConfigs(panel.children ?? [])]);
 }
 
+async function fetchFredApiSeries(config: SeriesConfig, force = true): Promise<SeriesResult> {
+  const apiKey = process.env.FRED_API_KEY;
+  const id = config.fredSeriesId;
+  if (!apiKey || !id) throw new Error(`Missing FRED API setup for ${config.id}`);
+  const startedAt = performance.now();
+  try {
+    const result = await fetchJson<{ observations?: { date: string; value: string }[] }>(
+      fredApiUrl(id, apiKey),
+      force ? Number(process.env.FRED_API_TIMEOUT_MS ?? 12000) : 7000
+    );
+    const observations = (result.data.observations ?? [])
+      .map((row) => ({ date: row.date, value: numeric(row.value) }))
+      .filter((row): row is Observation => Boolean(row.date) && row.value !== undefined);
+    await recordSourceHealth("fred", true, startedAt, result.status);
+    return {
+      config,
+      observations: compactObservations(observations),
+      stats: {},
+      citation: sourceCitation(config, result.retrievedAt, config.sourceUrl, {
+        provider: "FRED API",
+        seriesId: id,
+        endpoint: "https://api.stlouisfed.org/fred/series/observations",
+        fromCache: false,
+        stale: false
+      }),
+      confidence: observations.length ? "high" : "unavailable"
+    };
+  } catch (error) {
+    await recordSourceHealth("fred", false, startedAt, undefined, error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+}
+
 async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<SeriesResult[]> {
   const fredConfigs = configs.filter((config) => config.fredSeriesId);
   if (!fredConfigs.length) return [];
   if (process.env.FRED_API_KEY) {
-    const results = await Promise.all(
-      fredConfigs.map(async (config) => {
-        const result = await fetchSeries(config, force);
-        return {
-          config,
-          observations: result.observations,
-          stats: {},
-          citation: result.citation,
-          confidence: result.observations.length ? "high" : "unavailable"
-        } satisfies SeriesResult;
-      })
-    );
-    return results;
+    return Promise.all(fredConfigs.map((config) => fetchFredApiSeries(config, force)));
   }
 
   const ids = fredConfigs.map((config) => config.fredSeriesId!);
