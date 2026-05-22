@@ -22,6 +22,7 @@ async function runRefresh(request: NextRequest) {
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? "");
   const offset = Number(request.nextUrl.searchParams.get("offset") ?? "");
   const includeNews = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("news") ?? "").toLowerCase());
+  const includeCatalog = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("catalog") ?? "").toLowerCase());
   const supabase = getSupabaseAdmin();
   const runInsert = supabase
     ? await supabase
@@ -42,7 +43,8 @@ async function runRefresh(request: NextRequest) {
         panelIds: panels,
         limitSeries: Number.isFinite(limit) && limit > 0 ? limit : undefined,
         offset: Number.isFinite(offset) && offset > 0 ? offset : undefined,
-        includeNews
+        includeNews,
+        includeCatalog
       });
       refreshedSeries += result.refreshedSeries;
       refreshedNews += result.refreshedNews;
