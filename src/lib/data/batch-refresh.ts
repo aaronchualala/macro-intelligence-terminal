@@ -1,6 +1,6 @@
 import { getSource, getTabConfig } from "@/lib/catalog";
 import { parseCsv } from "@/lib/data/csv";
-import { fetchWithCache, recordSourceHealth } from "@/lib/data/http";
+import { recordSourceHealth } from "@/lib/data/http";
 import { fetchNewsFeed, fetchSeries } from "@/lib/data/providers";
 import { persistCatalogDefinitions, persistNewsItems, persistObservations } from "@/lib/data/engine";
 import type { Citation, Observation, PanelConfig, SeriesConfig, SeriesResult } from "@/lib/types";
@@ -25,9 +25,32 @@ function numeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function compactObservations(observations: Observation[], max = Number(process.env.OBSERVATION_HISTORY_LIMIT ?? 520)) {
+function compactObservations(observations: Observation[], max = Number(process.env.OBSERVATION_HISTORY_LIMIT ?? 240)) {
   if (observations.length <= max) return observations;
   return observations.slice(-max);
+}
+
+async function fetchText(url: string, timeoutMs = Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 24000)) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
+        Accept: "text/csv,text/plain,*/*"
+      },
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
+    return {
+      text: await response.text(),
+      status: response.status,
+      retrievedAt: new Date().toISOString()
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function fredGraphUrl(ids: string[]) {
@@ -61,7 +84,7 @@ function flattenPanelConfigs(panels: PanelConfig[]): PanelConfig[] {
 async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<SeriesResult[]> {
   const fredConfigs = configs.filter((config) => config.fredSeriesId);
   if (!fredConfigs.length) return [];
-  if (fredConfigs.length === 1 || process.env.FRED_API_KEY) {
+  if (process.env.FRED_API_KEY) {
     const results = await Promise.all(
       fredConfigs.map(async (config) => {
         const result = await fetchSeries(config, force);
@@ -81,15 +104,8 @@ async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<Se
   const url = fredGraphUrl(ids);
   const startedAt = performance.now();
   try {
-    const result = await fetchWithCache<string>(url, {
-      sourceId: "fred",
-      cacheTtlSeconds: 3600,
-      cacheKey: `fred-batch:${ids.join(",")}:${process.env.FRED_OBSERVATION_START ?? "2000-01-01"}`,
-      force,
-      asText: true,
-      timeoutMs: force ? Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 22000) : 7000
-    });
-    const rows = parseCsv(result.data);
+    const result = await fetchText(url, force ? Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 24000) : 7000);
+    const rows = parseCsv(result.text);
     await recordSourceHealth("fred", true, startedAt, result.status);
     return fredConfigs.map((config) => {
       const id = config.fredSeriesId!;
@@ -108,8 +124,8 @@ async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<Se
           seriesId: id,
           batchSeriesIds: ids,
           batchUrl: url,
-          fromCache: result.fromCache,
-          stale: result.stale ?? false
+          fromCache: false,
+          stale: false
         }),
         confidence: observations.length ? "high" : "unavailable"
       } satisfies SeriesResult;
