@@ -12,6 +12,7 @@ interface BatchRefreshOptions {
   limitSeries?: number;
   offset?: number;
   includeNews?: boolean;
+  includeCatalog?: boolean;
 }
 
 const RETIRED_FRED_SERIES = new Set(["NAPM", "NAPMNOI", "NAPMII", "NAPMPRI"]);
@@ -149,7 +150,9 @@ async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<Se
 
 export async function refreshTabDataBatch(tabId: string | null | undefined, scope: RefreshScope = "critical", options: BatchRefreshOptions = {}) {
   const tab = getTabConfig(tabId);
-  await persistCatalogDefinitions();
+  if (options.includeCatalog) {
+    await persistCatalogDefinitions();
+  }
   const panels = flattenPanelConfigs(tab.panels).filter((panel) =>
     options.panelIds?.length ? options.panelIds.includes(panel.id) : true
   );
