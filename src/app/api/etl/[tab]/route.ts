@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { TABS } from "@/lib/catalog";
 import { authorizedRefresh } from "@/lib/data/auth";
-import { refreshTabData } from "@/lib/data/engine";
+import { refreshTabDataBatch } from "@/lib/data/batch-refresh";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
 
 export const runtime = "nodejs";
@@ -24,18 +24,31 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
   }
 
   const scope = request.nextUrl.searchParams.get("scope") === "all" ? "all" : "critical";
+  const panels = request.nextUrl.searchParams
+    .getAll("panel")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const limit = Number(request.nextUrl.searchParams.get("limit") ?? "");
+  const offset = Number(request.nextUrl.searchParams.get("offset") ?? "");
+  const includeNews = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("news") ?? "").toLowerCase());
   const supabase = getSupabaseAdmin();
   const runInsert = supabase
     ? await supabase
         .from("refresh_runs")
-        .insert({ scope: `${scope}:${tab.id}`, status: "running" })
+        .insert({ scope: `${scope}:${tab.id}${panels.length ? `:${panels.join(",")}` : ""}`, status: "running" })
         .select("id")
         .single()
     : { data: null };
   const runId = runInsert.data?.id;
 
   try {
-    const result = await refreshTabData(tab.id, scope);
+    const result = await refreshTabDataBatch(tab.id, scope, {
+      panelIds: panels,
+      limitSeries: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+      offset: Number.isFinite(offset) && offset > 0 ? offset : undefined,
+      includeNews
+    });
     if (supabase && runId) {
       await supabase
         .from("refresh_runs")
