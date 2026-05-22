@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/etl/economic?scope=critical",
+      "path": "/api/etl/economic?scope=critical&limit=8&news=0",
       "schedule": "17 10 * * *"
     }
   ]
