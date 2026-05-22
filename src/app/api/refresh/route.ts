@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { TABS } from "@/lib/catalog";
 import { authorizedRefresh } from "@/lib/data/auth";
-import { refreshTabData } from "@/lib/data/engine";
+import { refreshTabDataBatch } from "@/lib/data/batch-refresh";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
 
 export const runtime = "nodejs";
@@ -14,6 +14,14 @@ async function runRefresh(request: NextRequest) {
   }
   const scope = request.nextUrl.searchParams.get("scope") ?? "critical";
   const tab = request.nextUrl.searchParams.get("tab");
+  const panels = request.nextUrl.searchParams
+    .getAll("panel")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const limit = Number(request.nextUrl.searchParams.get("limit") ?? "");
+  const offset = Number(request.nextUrl.searchParams.get("offset") ?? "");
+  const includeNews = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("news") ?? "").toLowerCase());
   const supabase = getSupabaseAdmin();
   const runInsert = supabase
     ? await supabase
@@ -30,7 +38,12 @@ async function runRefresh(request: NextRequest) {
   try {
     const tabs = tab ? [tab] : TABS.map((item) => item.id);
     for (const tabId of tabs) {
-      const result = await refreshTabData(tabId, scope === "all" ? "all" : "critical");
+      const result = await refreshTabDataBatch(tabId, scope === "all" ? "all" : "critical", {
+        panelIds: panels,
+        limitSeries: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+        offset: Number.isFinite(offset) && offset > 0 ? offset : undefined,
+        includeNews
+      });
       refreshedSeries += result.refreshedSeries;
       refreshedNews += result.refreshedNews;
       errors.push(...result.errors);
