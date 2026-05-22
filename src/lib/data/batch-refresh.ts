@@ -25,36 +25,47 @@ function numeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function compactObservations(observations: Observation[], max = Number(process.env.OBSERVATION_HISTORY_LIMIT ?? 240)) {
+function compactObservations(observations: Observation[], max = Number(process.env.OBSERVATION_HISTORY_LIMIT ?? 120)) {
   if (observations.length <= max) return observations;
   return observations.slice(-max);
 }
 
-async function fetchText(url: string, timeoutMs = Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 24000)) {
+async function fetchText(url: string, timeoutMs = Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 14000)) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Timed out after ${timeoutMs}ms fetching ${url}`));
+    }, timeoutMs);
+  });
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
-        Accept: "text/csv,text/plain,*/*"
-      },
-      cache: "no-store"
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
-    return {
-      text: await response.text(),
-      status: response.status,
-      retrievedAt: new Date().toISOString()
-    };
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
+            Accept: "text/csv,text/plain,*/*"
+          },
+          cache: "no-store"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
+        return {
+          text: await response.text(),
+          status: response.status,
+          retrievedAt: new Date().toISOString()
+        };
+      })(),
+      timeoutPromise
+    ]);
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
   }
 }
 
 function fredGraphUrl(ids: string[]) {
-  const start = process.env.FRED_OBSERVATION_START ?? "2000-01-01";
+  const start = process.env.FRED_OBSERVATION_START ?? "2022-01-01";
   return `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${ids.join(",")}&cosd=${start}`;
 }
 
@@ -104,7 +115,7 @@ async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<Se
   const url = fredGraphUrl(ids);
   const startedAt = performance.now();
   try {
-    const result = await fetchText(url, force ? Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 24000) : 7000);
+    const result = await fetchText(url, force ? Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 14000) : 7000);
     const rows = parseCsv(result.text);
     await recordSourceHealth("fred", true, startedAt, result.status);
     return fredConfigs.map((config) => {
@@ -159,18 +170,20 @@ export async function refreshTabDataBatch(tabId: string | null | undefined, scop
       seriesResults.push(...await fetchFredBatch(fredConfigs, true));
     } catch (error) {
       errors.push(`FRED batch: ${error instanceof Error ? error.message : String(error)}`);
-      for (const config of fredConfigs) {
-        try {
-          const result = await fetchSeries(config, true);
-          seriesResults.push({
-            config,
-            observations: result.observations,
-            stats: {},
-            citation: result.citation,
-            confidence: result.observations.length ? "high" : "unavailable"
-          });
-        } catch (fallbackError) {
-          errors.push(`${config.label}: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+      if (process.env.FRED_API_KEY || process.env.FRED_ALLOW_SERIES_FALLBACK === "1") {
+        for (const config of fredConfigs) {
+          try {
+            const result = await fetchSeries(config, true);
+            seriesResults.push({
+              config,
+              observations: result.observations,
+              stats: {},
+              citation: result.citation,
+              confidence: result.observations.length ? "high" : "unavailable"
+            });
+          } catch (fallbackError) {
+            errors.push(`${config.label}: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+          }
         }
       }
     }
