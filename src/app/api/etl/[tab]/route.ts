@@ -32,6 +32,7 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? "");
   const offset = Number(request.nextUrl.searchParams.get("offset") ?? "");
   const includeNews = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("news") ?? "").toLowerCase());
+  const includeCatalog = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("catalog") ?? "").toLowerCase());
   const supabase = getSupabaseAdmin();
   const runInsert = supabase
     ? await supabase
@@ -47,7 +48,8 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
       panelIds: panels,
       limitSeries: Number.isFinite(limit) && limit > 0 ? limit : undefined,
       offset: Number.isFinite(offset) && offset > 0 ? offset : undefined,
-      includeNews
+      includeNews,
+      includeCatalog
     });
     if (supabase && runId) {
       await supabase
