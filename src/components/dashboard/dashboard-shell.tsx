@@ -114,7 +114,7 @@ export function DashboardShell({
       let token = window.localStorage.getItem("macro-terminal:admin-token");
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const response = await fetch(`/api/etl/${snapshot.tab}?scope=critical`, {
+      const response = await fetch(`/api/etl/${snapshot.tab}?scope=critical&limit=8&news=0`, {
         method: "POST",
         headers
       });
@@ -122,7 +122,7 @@ export function DashboardShell({
         token = window.prompt("Enter dashboard refresh token") ?? "";
         if (token) {
           window.localStorage.setItem("macro-terminal:admin-token", token);
-          const retry = await fetch(`/api/etl/${snapshot.tab}?scope=critical`, {
+          const retry = await fetch(`/api/etl/${snapshot.tab}?scope=critical&limit=8&news=0`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` }
           });
