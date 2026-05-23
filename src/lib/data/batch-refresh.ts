@@ -215,9 +215,7 @@ async function fetchFredBatch(configs: SeriesConfig[], force = true): Promise<Se
 
 export async function refreshTabDataBatch(tabId: string | null | undefined, scope: RefreshScope = "critical", options: BatchRefreshOptions = {}) {
   const tab = getTabConfig(tabId);
-  if (options.includeCatalog) {
-    await persistCatalogDefinitions();
-  }
+  await persistCatalogDefinitions();
   const panels = flattenPanelConfigs(tab.panels).filter((panel) =>
     options.panelIds?.length ? options.panelIds.includes(panel.id) : true
   );
