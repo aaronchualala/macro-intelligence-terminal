@@ -27,8 +27,12 @@ function numeric(value: unknown) {
 }
 
 function compactObservations(observations: Observation[], max = Number(process.env.OBSERVATION_HISTORY_LIMIT ?? 120)) {
-  if (observations.length <= max) return observations;
-  return observations.slice(-max);
+  const sorted = observations
+    .filter((observation) => Boolean(observation.date) && Number.isFinite(observation.value))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const deduped = [...new Map(sorted.map((observation) => [observation.date, observation])).values()];
+  if (deduped.length <= max) return deduped;
+  return deduped.slice(-max);
 }
 
 async function fetchText(url: string, timeoutMs = Number(process.env.FRED_BATCH_TIMEOUT_MS ?? 14000)) {
@@ -109,6 +113,7 @@ function fredApiUrl(id: string, apiKey: string) {
     series_id: id,
     api_key: apiKey,
     file_type: "json",
+    sort_order: "asc",
     observation_start: process.env.FRED_OBSERVATION_START ?? "2022-01-01"
   });
   return `https://api.stlouisfed.org/fred/series/observations?${params.toString()}`;
