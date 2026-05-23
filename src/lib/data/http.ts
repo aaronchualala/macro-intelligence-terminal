@@ -64,16 +64,19 @@ export async function fetchWithCache<T = unknown>(url: string, options: FetchOpt
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
+      const requestInit: RequestInit & { next?: { revalidate: number } } = {
         ...fetchInit,
         signal: controller.signal,
+        cache: force ? "no-store" : fetchInit.cache,
         headers: {
           "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
           Accept: asText ? "text/*,*/*" : "application/json,text/csv,text/plain,*/*",
           ...fetchInit.headers
-        },
-        next: { revalidate: cacheTtlSeconds }
-      } as RequestInit & { next?: { revalidate: number } });
+        }
+      };
+      if (!force) requestInit.next = { revalidate: cacheTtlSeconds };
+
+      const response = await fetch(url, requestInit);
       clearTimeout(timeout);
 
       const contentType = response.headers.get("content-type") ?? undefined;
