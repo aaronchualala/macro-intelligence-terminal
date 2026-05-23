@@ -1,6 +1,6 @@
 import { DATA_SOURCES, getSource, getTabConfig, TABS } from "@/lib/catalog";
 import { computeStats, latestCorrelationSummary } from "@/lib/data/analytics";
-import { fetchNewsFeed, fetchSeries } from "@/lib/data/providers";
+import { fetchFredSeriesBatch, fetchNewsFeed, fetchSeries } from "@/lib/data/providers";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
 import type {
   Citation,
@@ -24,6 +24,15 @@ interface BuildOptions {
 }
 
 type RefreshScope = "critical" | "all";
+
+const RETIRED_FRED_SERIES = new Set(["NAPM", "NAPMNOI", "NAPMII", "NAPMPRI"]);
+
+interface RefreshOptions {
+  panelIds?: string[];
+  limitSeries?: number;
+  offset?: number;
+  includeNews?: boolean;
+}
 
 async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = [];
@@ -237,9 +246,10 @@ async function resolvePanel(panel: PanelConfig, force = false): Promise<PanelSna
 }
 
 function selectedPanelSeries(panel: PanelConfig, scope: RefreshScope | "ui" = "ui") {
-  if (scope === "all") return panel.series ?? [];
+  const sourceSeries = (panel.series ?? []).filter((series) => !RETIRED_FRED_SERIES.has(series.fredSeriesId ?? ""));
+  if (scope === "all") return sourceSeries;
   const maxSeries = panel.tags.includes("correlation") ? 6 : 2;
-  return [...(panel.series ?? [])].sort((a, b) => b.importance - a.importance).slice(0, maxSeries);
+  return [...sourceSeries].sort((a, b) => b.importance - a.importance).slice(0, maxSeries);
 }
 
 function flattenPanelConfigs(panels: PanelConfig[]): PanelConfig[] {
@@ -468,8 +478,22 @@ export async function buildCachedDashboardSnapshot(tabId?: string | null): Promi
 export async function persistCatalogDefinitions() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return;
-  await supabase.from("data_sources").upsert(
-    DATA_SOURCES.map((source) => ({
+  await persistDataSourceDefinitions(DATA_SOURCES.map((source) => source.id));
+  const series = TABS.flatMap((tab) =>
+    tab.panels.flatMap(function flatten(panel): NonNullable<PanelConfig["series"]> {
+      return [...(panel.series ?? []), ...(panel.children ?? []).flatMap(flatten)];
+    })
+  );
+  await persistSeriesDefinitions(series);
+}
+
+async function persistDataSourceDefinitions(sourceIds: string[]) {
+  const supabase = getSupabaseAdmin();
+  const sourceIdSet = new Set(sourceIds);
+  const sources = DATA_SOURCES.filter((source) => sourceIdSet.has(source.id));
+  if (!supabase || !sources.length) return;
+  const { error } = await supabase.from("data_sources").upsert(
+    sources.map((source) => ({
       id: source.id,
       name: source.name,
       kind: source.kind,
@@ -481,12 +505,15 @@ export async function persistCatalogDefinitions() {
       updated_at: new Date().toISOString()
     }))
   );
-  const series = TABS.flatMap((tab) =>
-    tab.panels.flatMap(function flatten(panel): NonNullable<PanelConfig["series"]> {
-      return [...(panel.series ?? []), ...(panel.children ?? []).flatMap(flatten)];
-    })
-  );
-  await supabase.from("macro_series").upsert(
+  if (error) throw new Error(`Failed to persist data source definitions: ${error.message}`);
+}
+
+export async function persistSeriesDefinitions(configs: SeriesConfig[]) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase || !configs.length) return;
+  const series = [...new Map(configs.map((config) => [config.id, config])).values()];
+  await persistDataSourceDefinitions([...new Set(series.map((config) => config.sourceId))]);
+  const { error } = await supabase.from("macro_series").upsert(
     series.map((config) => ({
       id: config.id,
       label: config.label,
@@ -502,14 +529,16 @@ export async function persistCatalogDefinitions() {
       updated_at: new Date().toISOString()
     }))
   );
+  if (error) throw new Error(`Failed to persist series definitions: ${error.message}`);
 }
 
 export async function persistObservations(results: SeriesResult[]) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return;
+  await persistSeriesDefinitions(results.map((result) => result.config));
   for (const result of results) {
     if (!result.observations.length) continue;
-    await supabase.from("macro_observations").upsert(
+    const { error } = await supabase.from("macro_observations").upsert(
       result.observations.map((observation: Observation) => ({
         series_id: result.config.id,
         observation_date: observation.date,
@@ -520,6 +549,7 @@ export async function persistObservations(results: SeriesResult[]) {
       })),
       { onConflict: "series_id,observation_date" }
     );
+    if (error) throw new Error(`Failed to persist observations for ${result.config.id}: ${error.message}`);
   }
 }
 
@@ -542,16 +572,61 @@ export async function persistNewsItems(items: NewsItem[]) {
   );
 }
 
-export async function refreshTabData(tabId: string | null | undefined, scope: RefreshScope = "critical") {
+export async function refreshTabData(tabId: string | null | undefined, scope: RefreshScope = "critical", options: RefreshOptions = {}) {
   const tab = getTabConfig(tabId);
   await persistCatalogDefinitions();
-  const panels = flattenPanelConfigs(tab.panels);
-  const series = panels.flatMap((panel) => selectedPanelSeries(panel, scope));
-  const feeds = panels.flatMap((panel) => panel.newsFeeds ?? []);
+  const panels = flattenPanelConfigs(tab.panels).filter((panel) =>
+    options.panelIds?.length ? options.panelIds.includes(panel.id) : true
+  );
+  const uniqueSeries = [...new Map(panels.flatMap((panel) => selectedPanelSeries(panel, scope)).map((item) => [item.id, item])).values()]
+    .sort((a, b) => b.importance - a.importance);
+  const defaultLimit = Number(process.env.REFRESH_SERIES_LIMIT ?? (scope === "all" ? 12 : 8));
+  const offset = Math.max(0, options.offset ?? 0);
+  const series = uniqueSeries.slice(offset, offset + Math.max(1, options.limitSeries ?? defaultLimit));
+  const feeds = options.includeNews ? panels.flatMap((panel) => panel.newsFeeds ?? []) : [];
   const errors: string[] = [];
   const seriesResults: SeriesResult[] = [];
 
-  const fetchedSeries = await mapLimit([...new Map(series.map((item) => [item.id, item])).values()], 2, async (config) => {
+  const fredConfigs = series.filter((config) => config.source === "fred");
+  const otherConfigs = series.filter((config) => config.source !== "fred");
+
+  if (fredConfigs.length) {
+    try {
+      const batchResults = await fetchFredSeriesBatch(fredConfigs, true);
+      batchResults.forEach((result, index) => {
+        const config = fredConfigs[index];
+        seriesResults.push({
+          config,
+          observations: result.observations,
+          stats: {},
+          citation: result.citation,
+          confidence: result.observations.length ? "high" : "unavailable"
+        });
+      });
+    } catch (error) {
+      errors.push(`FRED batch: ${error instanceof Error ? error.message : String(error)}`);
+      const fallbackResults = await mapLimit(fredConfigs, 1, async (config) => {
+        try {
+          const result = await fetchSeries(config, true);
+          return {
+            config,
+            observations: result.observations,
+            stats: {},
+            citation: result.citation,
+            confidence: result.observations.length ? "high" : "unavailable"
+          } satisfies SeriesResult;
+        } catch (fallbackError) {
+          errors.push(`${config.label}: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+          return null;
+        }
+      });
+      for (const result of fallbackResults) {
+        if (result) seriesResults.push(result);
+      }
+    }
+  }
+
+  const fetchedSeries = await mapLimit(otherConfigs, 2, async (config) => {
     try {
       const result = await fetchSeries(config, true);
       return {
