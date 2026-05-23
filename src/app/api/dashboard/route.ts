@@ -59,18 +59,17 @@ async function readRecentObservations(seriesIds: string[]) {
           return;
         }
 
-        grouped.set(
-          seriesId,
-          (data ?? [])
-            .map((row) => ({
-              date: row.observation_date,
-              value: Number(row.value),
-              sourceRetrievedAt: row.source_retrieved_at,
-              sourceUrl: row.source_url
-            }))
-            .filter((row): row is CachedObservation => Boolean(row.date) && Number.isFinite(row.value))
-            .sort((a, b) => a.date.localeCompare(b.date))
-        );
+        const observations: CachedObservation[] = (data ?? [])
+          .map((row) => ({
+            date: row.observation_date,
+            value: Number(row.value),
+            sourceRetrievedAt: row.source_retrieved_at,
+            sourceUrl: row.source_url
+          }))
+          .filter((row) => Boolean(row.date) && Number.isFinite(row.value))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        grouped.set(seriesId, observations);
       })
     );
   }
