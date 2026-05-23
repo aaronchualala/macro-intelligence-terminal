@@ -9,11 +9,10 @@ import {
   Search,
   ShieldCheck
 } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { MacroPanel } from "@/components/dashboard/macro-panel";
 import { MetricStrip } from "@/components/dashboard/metric-grid";
-import { TradingViewTape } from "@/components/dashboard/tradingview-tape";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DashboardSnapshot, PanelSnapshot, TabId } from "@/lib/types";
@@ -48,13 +47,15 @@ export function DashboardShell({
   tabs: { id: TabId; label: string }[];
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(initialSnapshot.panels.slice(0, 2).map((panel) => panel.id)));
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
+  const [urlStateReady, setUrlStateReady] = useState(false);
+  const busy = refreshing || Boolean(loadingLabel);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("macro-terminal:favorites");
@@ -62,15 +63,26 @@ export function DashboardShell({
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const expandedParam = params.get("expanded");
+    if (expandedParam) {
+      setExpanded(new Set(expandedParam.split(",").map((item) => item.trim()).filter(Boolean)));
+    }
+    setUrlStateReady(true);
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem("macro-terminal:favorites", JSON.stringify([...favorites]));
   }, [favorites]);
 
   useEffect(() => {
+    if (!urlStateReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("tab", snapshot.tab);
     if (expanded.size) params.set("expanded", [...expanded].join(","));
+    else params.delete("expanded");
     window.history.replaceState(null, "", `?${params.toString()}`);
-  }, [snapshot.tab, expanded]);
+  }, [snapshot.tab, expanded, urlStateReady]);
 
   const visiblePanels = useMemo(
     () => filterPanels(snapshot.panels, query, favoritesOnly, favorites),
@@ -96,25 +108,38 @@ export function DashboardShell({
     });
   }
 
+  async function fetchSnapshot(tab: TabId, force = false) {
+    const response = await fetch(`/api/dashboard?tab=${tab}${force ? "&force=1" : ""}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Could not load ${tab}: ${response.status}`);
+    return (await response.json()) as DashboardSnapshot;
+  }
+
   async function loadTab(tab: TabId, force = false) {
-    startTransition(() => {
-      void (async () => {
-        const response = await fetch(`/api/dashboard?tab=${tab}${force ? "&force=1" : ""}`, { cache: "no-store" });
-        const data = (await response.json()) as DashboardSnapshot;
-        setSnapshot(data);
-        setExpanded(new Set(data.panels.slice(0, 2).map((panel) => panel.id)));
-      })();
-    });
+    if (busy) return;
+    const label = tabs.find((item) => item.id === tab)?.label ?? "tab";
+    setLoadingLabel(tab === snapshot.tab ? "Reloading data" : `Loading ${label}`);
+    setRefreshMessage(null);
+    try {
+      const data = await fetchSnapshot(tab, force);
+      setSnapshot(data);
+      setExpanded(new Set());
+    } catch (error) {
+      setRefreshMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingLabel(null);
+    }
   }
 
   async function refresh() {
     setRefreshing(true);
+    setLoadingLabel("Refreshing live data");
     setRefreshMessage(null);
     try {
       let token = window.localStorage.getItem("macro-terminal:admin-token");
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const response = await fetch(`/api/etl/${snapshot.tab}?scope=critical&limit=8&news=0`, {
+      const refreshUrl = `/api/etl/${snapshot.tab}?scope=critical&limit=24&news=0`;
+      let response = await fetch(refreshUrl, {
         method: "POST",
         headers
       });
@@ -122,23 +147,39 @@ export function DashboardShell({
         token = window.prompt("Enter dashboard refresh token") ?? "";
         if (token) {
           window.localStorage.setItem("macro-terminal:admin-token", token);
-          const retry = await fetch(`/api/etl/${snapshot.tab}?scope=critical&limit=8&news=0`, {
+          response = await fetch(refreshUrl, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` }
           });
-          if (!retry.ok) throw new Error(`Refresh failed: ${retry.status}`);
+          if (response.status === 401) {
+            window.localStorage.removeItem("macro-terminal:admin-token");
+            throw new Error("Refresh token was rejected.");
+          }
         } else {
           throw new Error("Refresh token required.");
         }
-      } else if (!response.ok) {
+      }
+      if (!response.ok) {
         throw new Error(`Refresh failed: ${response.status}`);
       }
-      await loadTab(snapshot.tab, true);
-      setRefreshMessage("Refresh complete");
+      const result = (await response.json()) as { refreshedSeries?: number; errors?: string[]; error?: string };
+      if (result.error) throw new Error(result.error);
+      const data = await fetchSnapshot(snapshot.tab, true);
+      setSnapshot(data);
+      setExpanded(new Set());
+      const sourceIssues = result.errors?.length ?? 0;
+      if (sourceIssues) {
+        setRefreshMessage(`Refresh finished with ${sourceIssues} source issue${sourceIssues === 1 ? "" : "s"}.`);
+      } else if (!data.topMetrics.length) {
+        setRefreshMessage("Refresh finished, but no metrics were cached. Check the refresh token and source health.");
+      } else {
+        setRefreshMessage(`Refresh complete: ${result.refreshedSeries ?? data.topMetrics.length} series updated.`);
+      }
     } catch (error) {
       setRefreshMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setRefreshing(false);
+      setLoadingLabel(null);
     }
   }
 
@@ -147,8 +188,15 @@ export function DashboardShell({
 
   return (
     <main className="min-h-screen bg-[#050505] text-neutral-100">
-      <TradingViewTape />
-      <div className="mx-auto flex max-w-[1900px] flex-col gap-3 p-3 md:p-4 xl:p-5">
+      {busy ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 backdrop-blur-[1px]" aria-live="polite" aria-busy="true">
+          <div className="flex items-center gap-3 border border-neutral-700 bg-black/85 px-4 py-3 text-xs uppercase tracking-wide text-neutral-200 shadow-2xl">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            {loadingLabel ?? "Loading"}
+          </div>
+        </div>
+      ) : null}
+      <div className={`mx-auto flex max-w-[1900px] flex-col gap-3 p-3 md:p-4 xl:p-5 ${busy ? "pointer-events-none select-none" : ""}`}>
         <header className="grid gap-3 border-b border-neutral-900 pb-3 xl:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-500">
@@ -163,8 +211,7 @@ export function DashboardShell({
                 </Badge>
               ) : null}
             </div>
-            <h1 className="text-xl font-semibold tracking-normal text-neutral-50 md:text-2xl">Institutional Macro Terminal</h1>
-            <p className="mt-1 max-w-5xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
+            <p className="max-w-5xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[440px]">
             <div className="flex items-center gap-2 border border-neutral-800 bg-black px-2">
@@ -172,11 +219,12 @@ export function DashboardShell({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                disabled={busy}
                 placeholder="Search panels, tags, series"
                 className="h-9 min-w-0 flex-1 bg-transparent text-sm text-neutral-100 outline-none placeholder:text-neutral-600"
               />
             </div>
-            <Button onClick={refresh} disabled={refreshing || isPending} variant="secondary">
+            <Button onClick={refresh} disabled={busy} variant="secondary">
               <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
@@ -188,6 +236,7 @@ export function DashboardShell({
             <button
               key={tab.id}
               onClick={() => loadTab(tab.id)}
+              disabled={busy}
               className={`h-10 shrink-0 px-3 text-xs font-medium uppercase tracking-wide transition ${
                 tab.id === snapshot.tab ? "bg-neutral-100 text-black" : "bg-[#080808] text-neutral-300 hover:bg-neutral-950"
               }`}
