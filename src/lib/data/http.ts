@@ -34,8 +34,11 @@ export async function fetchWithCache<T = unknown>(url: string, options: FetchOpt
     sourceId,
     asText = false,
     timeoutMs = force ? 9000 : 4000,
+    cache: requestCache,
+    headers,
+    next: _next,
     ...fetchInit
-  } = options;
+  } = options as FetchOptions & { next?: unknown };
 
   const supabase = getSupabaseAdmin();
   const now = new Date();
@@ -64,19 +67,21 @@ export async function fetchWithCache<T = unknown>(url: string, options: FetchOpt
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const requestInit: RequestInit & { next?: { revalidate: number } } = {
+      const requestHeaders = new Headers(headers);
+      requestHeaders.set("User-Agent", "MacroIntelligenceDashboard/0.1 contact=personal-dashboard");
+      requestHeaders.set("Accept", asText ? "text/*,*/*" : "application/json,text/csv,text/plain,*/*");
+      const requestInit: RequestInit = {
         ...fetchInit,
         signal: controller.signal,
-        cache: force ? "no-store" : fetchInit.cache,
-        headers: {
-          "User-Agent": "MacroIntelligenceDashboard/0.1 contact=personal-dashboard",
-          Accept: asText ? "text/*,*/*" : "application/json,text/csv,text/plain,*/*",
-          ...fetchInit.headers
-        }
+        cache: force ? "no-store" : requestCache,
+        headers: requestHeaders
       };
-      if (!force) requestInit.next = { revalidate: cacheTtlSeconds };
-
-      const response = await fetch(url, requestInit);
+      const response = await fetch(
+        url,
+        force
+          ? requestInit
+          : ({ ...requestInit, next: { revalidate: cacheTtlSeconds } } as RequestInit & { next: { revalidate: number } })
+      );
       clearTimeout(timeout);
 
       const contentType = response.headers.get("content-type") ?? undefined;
