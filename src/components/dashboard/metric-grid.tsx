@@ -13,6 +13,19 @@ function DirectionIcon({ direction }: { direction?: string }) {
   return <ArrowRight className="h-3.5 w-3.5" />;
 }
 
+function metricUnit(metric: SeriesResult) {
+  if (metric.config.unit !== "index/price") return metric.config.unit;
+  const symbol = metric.config.marketSymbol ?? "";
+  if (symbol.startsWith("^")) return "index pts";
+  if (symbol.endsWith("=X")) return "FX rate";
+  if (symbol.endsWith("-USD")) return "USD";
+  return "USD/share";
+}
+
+function formatMetricValue(metric: SeriesResult, value = metric.stats.latest) {
+  return formatNumber(value, metricUnit(metric));
+}
+
 export function MetricStrip({ metrics }: { metrics: SeriesResult[] }) {
   return (
     <div className="grid gap-px overflow-hidden border border-neutral-800 bg-neutral-800 md:grid-cols-2 xl:grid-cols-4">
@@ -29,7 +42,7 @@ export function MetricStrip({ metrics }: { metrics: SeriesResult[] }) {
             <DirectionIcon direction={metric.stats.direction} />
           </div>
           <div className="truncate text-lg font-semibold tabular-nums text-neutral-50">
-            {formatNumber(metric.stats.latest, metric.config.unit)}
+            {formatMetricValue(metric)}
           </div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-neutral-500">
             <span>{formatDate(metric.stats.latestDate)}</span>
@@ -72,13 +85,13 @@ export function MetricDetail({ metric }: { metric: SeriesResult }) {
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <TimeSeriesChart data={metric.observations} unit={metric.config.unit} />
+        <TimeSeriesChart data={metric.observations} unit={metricUnit(metric)} />
       </div>
       <div className="grid content-start gap-px overflow-hidden border border-neutral-800 bg-neutral-800 text-xs">
         {[
-          ["Latest", formatNumber(metric.stats.latest, metric.config.unit)],
+          ["Latest", formatMetricValue(metric)],
           ["Latest date", formatDate(metric.stats.latestDate)],
-          ["Prior", formatNumber(metric.stats.prior, metric.config.unit)],
+          ["Prior", formatMetricValue(metric, metric.stats.prior)],
           ["MoM", formatNumber(metric.stats.mom, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
           ["YoY", formatNumber(metric.stats.yoy, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
           ["3m ann.", formatNumber(metric.stats.threeMonthAnnualized, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
