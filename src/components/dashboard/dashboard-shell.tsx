@@ -63,6 +63,26 @@ export function DashboardShell({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadingLabel("Loading latest data");
+    fetchSnapshot(initialSnapshot.tab, true)
+      .then((data) => {
+        if (cancelled) return;
+        setSnapshot(data);
+        setExpanded(new Set());
+      })
+      .catch((error) => {
+        if (!cancelled) setRefreshMessage(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLabel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSnapshot.tab]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const expandedParam = params.get("expanded");
     if (expandedParam) {
