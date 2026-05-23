@@ -17,7 +17,7 @@ import { CorrelationChart } from "@/components/dashboard/charts";
 import { MetricDetail, MetricStrip } from "@/components/dashboard/metric-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PanelSnapshot } from "@/lib/types";
+import type { PanelSnapshot, SeriesResult } from "@/lib/types";
 import { formatNumber, freshnessLabel } from "@/lib/utils";
 
 function confidenceTone(confidence: string) {
@@ -25,6 +25,19 @@ function confidenceTone(confidence: string) {
   if (confidence === "medium") return "warn" as const;
   if (confidence === "low") return "warn" as const;
   return "risk" as const;
+}
+
+function metricUnit(metric: SeriesResult) {
+  if (metric.config.unit !== "index/price") return metric.config.unit;
+  const symbol = metric.config.marketSymbol ?? "";
+  if (symbol.startsWith("^")) return "index pts";
+  if (symbol.endsWith("=X")) return "FX rate";
+  if (symbol.endsWith("-USD")) return "USD";
+  return "USD/share";
+}
+
+function formatMetricValue(metric: SeriesResult) {
+  return formatNumber(metric.stats.latest, metricUnit(metric));
 }
 
 function ScenarioTree({ panel }: { panel: PanelSnapshot }) {
@@ -167,7 +180,7 @@ export function MacroPanel({
         <div className="hidden min-w-[220px] text-right md:block">
           <div className="text-[11px] uppercase tracking-wide text-neutral-500">{panel.regime}</div>
           <div className="mt-1 truncate text-sm tabular-nums text-neutral-200">
-            {topMetric ? `${topMetric.config.label}: ${formatNumber(topMetric.stats.latest, topMetric.config.unit)}` : "news/methodology panel"}
+            {topMetric ? `${topMetric.config.label}: ${formatMetricValue(topMetric)}` : "news/methodology panel"}
           </div>
           <div className="mt-1 text-[11px] text-neutral-500">retrieved {freshnessLabel(panel.retrievedAt)}</div>
         </div>
