@@ -34,13 +34,20 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
   const includeNews = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("news") ?? "").toLowerCase());
   const includeCatalog = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("catalog") ?? "").toLowerCase());
   const supabase = getSupabaseAdmin();
-  const runInsert = supabase
-    ? await supabase
-        .from("refresh_runs")
-        .insert({ scope: `${scope}:${tab.id}${panels.length ? `:${panels.join(",")}` : ""}`, status: "running" })
-        .select("id")
-        .single()
-    : { data: null };
+  if (!supabase) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Supabase admin connection is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel, then redeploy."
+      },
+      { status: 500 }
+    );
+  }
+  const runInsert = await supabase
+    .from("refresh_runs")
+    .insert({ scope: `${scope}:${tab.id}${panels.length ? `:${panels.join(",")}` : ""}`, status: "running" })
+    .select("id")
+    .single();
   const runId = runInsert.data?.id;
 
   try {
@@ -51,7 +58,7 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
       includeNews,
       includeCatalog
     });
-    if (supabase && runId) {
+    if (runId) {
       await supabase
         .from("refresh_runs")
         .update({
@@ -66,7 +73,7 @@ async function runTabEtl(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (supabase && runId) {
+    if (runId) {
       await supabase
         .from("refresh_runs")
         .update({
