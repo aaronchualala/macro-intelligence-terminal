@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { buildCachedDashboardSnapshot } from "@/lib/data/engine";
+import { buildCachedDashboardSnapshot, buildDashboardSnapshot } from "@/lib/data/engine";
+import type { DashboardSnapshot } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
+
+function cacheLooksTruncated(snapshot: DashboardSnapshot) {
+  const cutoff = Date.UTC(1995, 0, 1);
+  return snapshot.topMetrics.some((metric) => {
+    const latestDate = metric.stats.latestDate;
+    if (!latestDate) return false;
+    const timestamp = new Date(latestDate).getTime();
+    return Number.isFinite(timestamp) && timestamp < cutoff;
+  });
+}
 
 export async function GET(request: NextRequest) {
   const tab = request.nextUrl.searchParams.get("tab");
-  const snapshot = await buildCachedDashboardSnapshot(tab);
+  const cachedSnapshot = await buildCachedDashboardSnapshot(tab);
+  const snapshot = cacheLooksTruncated(cachedSnapshot)
+    ? await buildDashboardSnapshot(tab, { force: false })
+    : cachedSnapshot;
+
   return NextResponse.json(snapshot, {
     headers: {
-      "Cache-Control": "s-maxage=120, stale-while-revalidate=1800"
+      "Cache-Control": "no-store"
     }
   });
 }
