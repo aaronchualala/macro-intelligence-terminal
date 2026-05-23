@@ -211,7 +211,6 @@ export function DashboardShell({
                 </Badge>
               ) : null}
             </div>
-            <p className="max-w-5xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[440px]">
             <div className="flex items-center gap-2 border border-neutral-800 bg-black px-2">
@@ -245,6 +244,10 @@ export function DashboardShell({
             </button>
           ))}
         </nav>
+
+        <section className="border border-neutral-900 bg-black px-3 py-2">
+          <p className="max-w-6xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
+        </section>
 
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="min-w-0">
