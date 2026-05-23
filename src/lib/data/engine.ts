@@ -1,6 +1,6 @@
 import { DATA_SOURCES, getSource, getTabConfig, TABS } from "@/lib/catalog";
 import { computeStats, latestCorrelationSummary } from "@/lib/data/analytics";
-import { fetchFredSeriesBatch, fetchNewsFeed, fetchSeries } from "@/lib/data/providers";
+import { fetchNewsFeed, fetchSeries } from "@/lib/data/providers";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
 import type {
   Citation,
@@ -587,46 +587,7 @@ export async function refreshTabData(tabId: string | null | undefined, scope: Re
   const errors: string[] = [];
   const seriesResults: SeriesResult[] = [];
 
-  const fredConfigs = series.filter((config) => config.source === "fred");
-  const otherConfigs = series.filter((config) => config.source !== "fred");
-
-  if (fredConfigs.length) {
-    try {
-      const batchResults = await fetchFredSeriesBatch(fredConfigs, true);
-      batchResults.forEach((result, index) => {
-        const config = fredConfigs[index];
-        seriesResults.push({
-          config,
-          observations: result.observations,
-          stats: {},
-          citation: result.citation,
-          confidence: result.observations.length ? "high" : "unavailable"
-        });
-      });
-    } catch (error) {
-      errors.push(`FRED batch: ${error instanceof Error ? error.message : String(error)}`);
-      const fallbackResults = await mapLimit(fredConfigs, 1, async (config) => {
-        try {
-          const result = await fetchSeries(config, true);
-          return {
-            config,
-            observations: result.observations,
-            stats: {},
-            citation: result.citation,
-            confidence: result.observations.length ? "high" : "unavailable"
-          } satisfies SeriesResult;
-        } catch (fallbackError) {
-          errors.push(`${config.label}: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
-          return null;
-        }
-      });
-      for (const result of fallbackResults) {
-        if (result) seriesResults.push(result);
-      }
-    }
-  }
-
-  const fetchedSeries = await mapLimit(otherConfigs, 2, async (config) => {
+  const fetchedSeries = await mapLimit(series, 2, async (config) => {
     try {
       const result = await fetchSeries(config, true);
       return {
