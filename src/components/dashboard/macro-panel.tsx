@@ -2,21 +2,16 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   ExternalLink,
   GitBranch,
-  Newspaper,
-  Star,
-  StarOff
+  Newspaper
 } from "lucide-react";
-import { useState } from "react";
 
 import { CorrelationChart } from "@/components/dashboard/charts";
 import { MetricTable } from "@/components/dashboard/metric-grid";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type { PanelSnapshot } from "@/lib/types";
 import { freshnessLabel } from "@/lib/utils";
 
@@ -117,9 +112,7 @@ export function MacroPanel({
   isExpanded,
   onToggle,
   tab,
-  depth = 0,
-  isFavorite,
-  onFavoriteToggle
+  depth = 0
 }: {
   panel: PanelSnapshot;
   expanded: boolean;
@@ -127,28 +120,7 @@ export function MacroPanel({
   onToggle: (id: string) => void;
   tab: string;
   depth?: number;
-  isFavorite: (id: string) => boolean;
-  onFavoriteToggle: (id: string) => void;
 }) {
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const favorite = isFavorite(panel.id);
-
-  async function summarize() {
-    setAiLoading(true);
-    try {
-      const response = await fetch("/api/ai/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tab, panelId: panel.id })
-      });
-      const data = (await response.json()) as { summary?: string; error?: string; mode?: string };
-      setAiSummary(data.summary ?? data.error ?? "Summary unavailable.");
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
   return (
     <article
       className={`relative overflow-hidden border border-neutral-800/90 bg-[#080808] shadow-[0_0_0_1px_rgba(255,255,255,0.015),0_18px_42px_rgba(0,0,0,0.28)] transition-colors hover:border-neutral-600 ${
@@ -179,7 +151,10 @@ export function MacroPanel({
             ))}
           </div>
           <h3 className="truncate text-base font-semibold text-neutral-50 md:text-lg">{panel.title}</h3>
-          <p className="mt-1 line-clamp-2 text-sm leading-5 text-neutral-400">{panel.summary}</p>
+          <p className="mt-1 line-clamp-3 text-sm leading-5 text-neutral-400">
+            {panel.summary}
+            {panel.description ? <span className="text-neutral-300"> {panel.description}</span> : null}
+          </p>
           <div className="mt-3 border-l border-neutral-700 bg-black/25 py-2 pl-3">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <span className="text-[10px] uppercase tracking-wide text-neutral-500">Regime</span>
@@ -209,19 +184,6 @@ export function MacroPanel({
             className="overflow-hidden border-t border-neutral-800"
           >
             <div className="grid gap-3 p-3 md:p-4">
-              <div className="grid gap-3">
-                <p className="text-sm leading-6 text-neutral-300">{panel.description}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={(event) => { event.stopPropagation(); summarize(); }} disabled={aiLoading}>
-                    <Bot className="h-4 w-4" />
-                    {aiLoading ? "Summarizing" : "AI Summary"}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={(event) => { event.stopPropagation(); onFavoriteToggle(panel.id); }}>
-                    {favorite ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              {aiSummary ? <div className="border border-neutral-800 bg-black p-3 text-sm leading-6 text-neutral-200">{aiSummary}</div> : null}
               <MetricTable metrics={panel.metrics} />
               <ScenarioTree panel={panel} />
               <CorrelationBlock panel={panel} />
@@ -257,8 +219,6 @@ export function MacroPanel({
                       onToggle={onToggle}
                       tab={tab}
                       depth={depth + 1}
-                      isFavorite={isFavorite}
-                      onFavoriteToggle={onFavoriteToggle}
                     />
                   ))}
                 </div>
