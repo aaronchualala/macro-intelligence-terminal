@@ -27,6 +27,11 @@ function confidenceTone(confidence: string) {
   return "risk" as const;
 }
 
+function dataAvailabilityLabel(confidence: string) {
+  const normalized = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+  return `${normalized} Data Availability`;
+}
+
 function ScenarioTree({ panel }: { panel: PanelSnapshot }) {
   if (!panel.scenarios.length) return null;
   return (
@@ -145,20 +150,29 @@ export function MacroPanel({
   }
 
   return (
-    <article className={`border border-neutral-800/90 bg-[#080808] transition-colors hover:border-neutral-700 ${depth ? "bg-[#070707]" : ""}`}>
+    <article
+      className={`relative overflow-hidden border border-neutral-800/90 bg-[#080808] shadow-[0_0_0_1px_rgba(255,255,255,0.015),0_18px_42px_rgba(0,0,0,0.28)] transition-colors hover:border-neutral-600 ${
+        depth ? "bg-[#070707]" : ""
+      }`}
+    >
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-neutral-500/45" />
       <button
         type="button"
         onClick={() => onToggle(panel.id)}
         aria-expanded={expanded}
-        className="group grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 p-3 text-left transition hover:bg-[#0d0d0d] md:grid-cols-[auto_minmax(0,1fr)_210px] md:p-4"
+        className="group grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 p-4 text-left transition hover:bg-[#0d0d0d] md:grid-cols-[auto_minmax(0,1fr)_220px] md:p-5"
       >
-        <div className="mt-0.5 grid h-7 w-7 place-items-center border border-neutral-800 bg-black text-neutral-400 transition group-hover:border-neutral-600 group-hover:text-neutral-100">
+        <div className="mt-0.5 grid h-8 w-8 place-items-center border border-neutral-800 bg-black text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition group-hover:border-neutral-500 group-hover:text-neutral-100">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-neutral-500">Rank {panel.importance}</span>
-            <Badge tone={confidenceTone(panel.confidence)}>{panel.confidence}</Badge>
+            <span className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-300">
+              Importance Ranking {panel.importance}
+            </span>
+            <Badge tone={confidenceTone(panel.confidence)} className="normal-case text-[11px]">
+              {dataAvailabilityLabel(panel.confidence)}
+            </Badge>
             {panel.timeHorizon ? <Badge>{panel.timeHorizon}</Badge> : null}
             {panel.tags.slice(0, 4).map((tag) => (
               <Badge key={tag}>{tag}</Badge>
@@ -166,12 +180,12 @@ export function MacroPanel({
           </div>
           <h3 className="truncate text-base font-semibold text-neutral-50 md:text-lg">{panel.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm leading-5 text-neutral-400">{panel.summary}</p>
-          <div className="mt-3 border-l border-neutral-800 pl-3">
+          <div className="mt-3 border-l border-neutral-700 bg-black/25 py-2 pl-3">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <span className="text-[10px] uppercase tracking-wide text-neutral-500">Regime</span>
               <span className="text-[11px] uppercase tracking-wide text-neutral-200">{panel.regime}</span>
             </div>
-            <p className="line-clamp-2 text-xs leading-5 text-neutral-300">{panel.conclusion}</p>
+            <p className="line-clamp-2 text-xs leading-5 text-neutral-200">{panel.conclusion}</p>
           </div>
         </div>
         <div className="hidden min-w-[190px] self-center text-right md:block">
