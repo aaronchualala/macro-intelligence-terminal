@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import type { SeriesConfig, SeriesResult } from "@/lib/types";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -14,6 +16,19 @@ export function formatNumber(value?: number, unit = "", digits = 2) {
     minimumFractionDigits: abs < 10 && abs !== 0 ? Math.min(1, decimals) : 0
   }).format(value);
   return unit === "percent" ? `${formatted}%` : unit === "bps" ? `${formatted} bps` : `${formatted}${unit ? ` ${unit}` : ""}`;
+}
+
+export function metricDisplayUnit(config: Pick<SeriesConfig, "unit" | "marketSymbol">) {
+  if (config.unit !== "index/price") return config.unit;
+  const symbol = config.marketSymbol ?? "";
+  if (symbol.startsWith("^")) return "index pts";
+  if (symbol.endsWith("=X")) return "FX rate";
+  if (symbol.endsWith("-USD")) return "USD";
+  return "USD/share";
+}
+
+export function formatMetricNumber(metric: SeriesResult, value = metric.stats.latest) {
+  return formatNumber(value, metricDisplayUnit(metric.config));
 }
 
 export function formatDate(value?: string) {
