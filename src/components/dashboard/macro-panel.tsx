@@ -17,27 +17,14 @@ import { CorrelationChart } from "@/components/dashboard/charts";
 import { MetricDetail, MetricStrip } from "@/components/dashboard/metric-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PanelSnapshot, SeriesResult } from "@/lib/types";
-import { formatNumber, freshnessLabel } from "@/lib/utils";
+import type { PanelSnapshot } from "@/lib/types";
+import { freshnessLabel } from "@/lib/utils";
 
 function confidenceTone(confidence: string) {
   if (confidence === "high") return "good" as const;
   if (confidence === "medium") return "warn" as const;
   if (confidence === "low") return "warn" as const;
   return "risk" as const;
-}
-
-function metricUnit(metric: SeriesResult) {
-  if (metric.config.unit !== "index/price") return metric.config.unit;
-  const symbol = metric.config.marketSymbol ?? "";
-  if (symbol.startsWith("^")) return "index pts";
-  if (symbol.endsWith("=X")) return "FX rate";
-  if (symbol.endsWith("-USD")) return "USD";
-  return "USD/share";
-}
-
-function formatMetricValue(metric: SeriesResult) {
-  return formatNumber(metric.stats.latest, metricUnit(metric));
 }
 
 function ScenarioTree({ panel }: { panel: PanelSnapshot }) {
@@ -140,7 +127,6 @@ export function MacroPanel({
 }) {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const topMetric = panel.metrics[0];
   const favorite = isFavorite(panel.id);
 
   async function summarize() {
@@ -159,12 +145,16 @@ export function MacroPanel({
   }
 
   return (
-    <article className="border border-neutral-800 bg-[#080808]">
+    <article className={`border border-neutral-800/90 bg-[#080808] transition-colors hover:border-neutral-700 ${depth ? "bg-[#070707]" : ""}`}>
       <button
+        type="button"
         onClick={() => onToggle(panel.id)}
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] gap-3 p-3 text-left transition hover:bg-neutral-950 md:p-4"
+        aria-expanded={expanded}
+        className="group grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 p-3 text-left transition hover:bg-[#0d0d0d] md:grid-cols-[auto_minmax(0,1fr)_210px] md:p-4"
       >
-        <div className="pt-1 text-neutral-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</div>
+        <div className="mt-0.5 grid h-7 w-7 place-items-center border border-neutral-800 bg-black text-neutral-400 transition group-hover:border-neutral-600 group-hover:text-neutral-100">
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-[11px] uppercase tracking-wide text-neutral-500">Rank {panel.importance}</span>
@@ -176,12 +166,16 @@ export function MacroPanel({
           </div>
           <h3 className="truncate text-base font-semibold text-neutral-50 md:text-lg">{panel.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm leading-5 text-neutral-400">{panel.summary}</p>
-        </div>
-        <div className="hidden min-w-[220px] text-right md:block">
-          <div className="text-[11px] uppercase tracking-wide text-neutral-500">{panel.regime}</div>
-          <div className="mt-1 truncate text-sm tabular-nums text-neutral-200">
-            {topMetric ? `${topMetric.config.label}: ${formatMetricValue(topMetric)}` : "news/methodology panel"}
+          <div className="mt-3 border-l border-neutral-800 pl-3">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-neutral-500">Regime</span>
+              <span className="text-[11px] uppercase tracking-wide text-neutral-200">{panel.regime}</span>
+            </div>
+            <p className="line-clamp-2 text-xs leading-5 text-neutral-300">{panel.conclusion}</p>
           </div>
+        </div>
+        <div className="hidden min-w-[190px] self-center text-right md:block">
+          <div className="text-sm tabular-nums text-neutral-200">{panel.citations.length} sources</div>
           <div className="mt-1 text-[11px] text-neutral-500">retrieved {freshnessLabel(panel.retrievedAt)}</div>
         </div>
       </button>
@@ -198,9 +192,8 @@ export function MacroPanel({
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
                 <div className="min-w-0">
                   <p className="text-sm leading-6 text-neutral-300">{panel.description}</p>
-                  <p className="mt-2 text-sm leading-6 text-neutral-100">{panel.conclusion}</p>
                 </div>
-                <div className="grid gap-2 border border-neutral-800 bg-black p-3 text-xs text-neutral-400">
+                <div className="grid gap-2 border border-neutral-800 bg-black p-3 text-xs text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                   <div className="flex items-center justify-between gap-2">
                     <span className="uppercase tracking-wide">Regime</span>
                     <span className="text-right text-neutral-100">{panel.regime}</span>
