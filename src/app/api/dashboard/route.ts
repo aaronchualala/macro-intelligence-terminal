@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { computeStats } from "@/lib/data/analytics";
 import { buildCachedDashboardSnapshot, buildDashboardSnapshot } from "@/lib/data/engine";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
-import type { DashboardSnapshot, Observation, PanelSnapshot, SeriesResult } from "@/lib/types";
+import type { DashboardSnapshot, Observation, PanelSnapshot, SeriesResult, WindowKey } from "@/lib/types";
+import { formatNumber } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,109 @@ function collectPanelMetrics(panel: PanelSnapshot): SeriesResult[] {
   return [...panel.metrics, ...panel.children.flatMap(collectPanelMetrics)];
 }
 
+function collectPanels(panel: PanelSnapshot): PanelSnapshot[] {
+  return [panel, ...panel.children.flatMap(collectPanels)];
+}
+
 function collectMetrics(snapshot: DashboardSnapshot) {
   return [...snapshot.topMetrics, ...snapshot.panels.flatMap(collectPanelMetrics)];
 }
 
 function cacheLooksTruncated(snapshot: DashboardSnapshot) {
   return collectMetrics(snapshot).some(metricLooksTruncated);
+}
+
+function weightedStress(metrics: SeriesResult[]) {
+  let numerator = 0;
+  let denominator = 0;
+  for (const metric of metrics) {
+    if (metric.stats.zScore === undefined || metric.confidence === "unavailable") continue;
+    const weight = metric.config.importance;
+    const polarity = metric.config.polarity;
+    let z = metric.stats.zScore;
+    if (polarity === "higher_is_easier") z = -z;
+    if (polarity === "neutral") z = Math.abs(z) * 0.25;
+    numerator += z * weight;
+    denominator += weight;
+  }
+  return denominator ? numerator / denominator : 0;
+}
+
+function regimeForPanel(panel: PanelSnapshot) {
+  if (panel.metrics.length === 0) return panel.news.length ? "news-driven" : "framework";
+  const stress = weightedStress(panel.metrics);
+  const hotCount = panel.metrics.filter((metric) =>
+    metric.stats.regime?.includes("hot") || metric.stats.regime?.includes("stress") || metric.stats.regime?.includes("tight")
+  ).length;
+  const coolCount = panel.metrics.filter((metric) =>
+    metric.stats.regime?.includes("cool") || metric.stats.regime?.includes("relief") || metric.stats.regime?.includes("easing")
+  ).length;
+  if (stress > 0.85) return "tightening / stress regime";
+  if (stress < -0.85) return "easing / disinflationary regime";
+  if (hotCount > coolCount + 1) return "above-trend / hot regime";
+  if (coolCount > hotCount + 1) return "cooling / easing regime";
+  return "mixed / transition regime";
+}
+
+function changeLine(metric: SeriesResult, key: WindowKey) {
+  const value =
+    key === "24h" ? metric.stats.oneDayChange :
+    key === "7d" ? metric.stats.sevenDayChange :
+    metric.stats.thirtyDayChange;
+  if (value === undefined || metric.confidence === "unavailable") return null;
+  const absolute = metric.config.transform === "rate" || metric.config.transform === "spread";
+  const unit = absolute ? metric.config.unit : "percent";
+  const sign = value > 0 ? "+" : "";
+  return `${metric.config.label}: ${sign}${formatNumber(value, unit)} over ${key}`;
+}
+
+function whatChanged(metrics: SeriesResult[]) {
+  return (["24h", "7d", "30d"] as const).reduce<Record<WindowKey, string[]>>((accumulator, key) => {
+    accumulator[key] = metrics
+      .map((metric) => changeLine(metric, key))
+      .filter((line): line is string => Boolean(line))
+      .slice(0, 4);
+    return accumulator;
+  }, { "24h": [], "7d": [], "30d": [] });
+}
+
+function conclusionForPanel(panel: PanelSnapshot) {
+  const topMetric = panel.metrics
+    .filter((metric) => metric.stats.latest !== undefined)
+    .sort((a, b) => b.config.importance - a.config.importance)[0];
+  const latestNews = [...panel.news]
+    .sort((a, b) => new Date(b.publishedAt ?? b.retrievedAt).getTime() - new Date(a.publishedAt ?? a.retrievedAt).getTime())[0];
+  if (!topMetric && latestNews) return `${panel.title}: latest source flow is led by ${latestNews.title}.`;
+  if (!topMetric) return panel.summary;
+  const change = topMetric.stats.thirtyDayChange ?? topMetric.stats.yoy ?? topMetric.stats.mom;
+  const unit = topMetric.config.transform === "rate" || topMetric.config.transform === "spread" ? topMetric.config.unit : "percent";
+  const changeText = change === undefined
+    ? "freshness is available but change history is limited"
+    : `${change >= 0 ? "+" : ""}${formatNumber(change, unit)} on the relevant lookback`;
+  return `${panel.title}: ${topMetric.config.label} is ${formatNumber(topMetric.stats.latest, topMetric.config.unit)} as of ${topMetric.stats.latestDate}; ${changeText}.`;
+}
+
+function refreshPanelDerivedState(panel: PanelSnapshot): PanelSnapshot {
+  panel.children = panel.children.map(refreshPanelDerivedState);
+  panel.regime = regimeForPanel(panel);
+  panel.whatChanged = whatChanged(panel.metrics);
+  panel.conclusion = conclusionForPanel(panel);
+  return panel;
+}
+
+function refreshSnapshotDerivedState(snapshot: DashboardSnapshot) {
+  snapshot.panels = snapshot.panels.map(refreshPanelDerivedState);
+  snapshot.topConclusions = snapshot.panels
+    .flatMap(collectPanels)
+    .sort((a, b) => b.importance - a.importance)
+    .slice(0, 5)
+    .map((panel) => panel.conclusion);
+  snapshot.globalRegime = snapshot.panels.some((panel) => panel.regime.includes("tight") || panel.regime.includes("stress"))
+    ? "risk tightening dominates"
+    : snapshot.panels.some((panel) => panel.regime.includes("easing"))
+      ? "liquidity/easing impulse building"
+      : "mixed transition";
+  return snapshot;
 }
 
 async function readRecentObservations(seriesIds: string[]) {
@@ -108,7 +206,7 @@ async function repairSnapshotFromSupabase(snapshot: DashboardSnapshot) {
     .filter((metric) => metric.error)
     .map((metric) => `${metric.config.label}: ${metric.error}`);
 
-  return snapshot;
+  return refreshSnapshotDerivedState(snapshot);
 }
 
 export async function GET(request: NextRequest) {
@@ -121,7 +219,7 @@ export async function GET(request: NextRequest) {
     ? await buildDashboardSnapshot(tab, { force: true })
     : repairedSnapshot;
 
-  return NextResponse.json(snapshot, {
+  return NextResponse.json(refreshSnapshotDerivedState(snapshot), {
     headers: {
       "Cache-Control": "no-store"
     }
