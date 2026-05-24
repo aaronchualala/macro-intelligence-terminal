@@ -16,7 +16,7 @@ import type {
   TabId,
   WindowKey
 } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
+import { formatMetricNumber, formatNumber } from "@/lib/utils";
 
 interface BuildOptions {
   force?: boolean;
@@ -46,6 +46,23 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Pr
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
   return results;
+}
+
+async function withTimeout<T>(label: string, work: PromiseLike<T>, timeoutMs = 8000): Promise<T | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(work),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => {
+          console.error(`${label} timed out after ${timeoutMs}ms`);
+          resolve(null);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function fallbackCitation(config: SeriesConfig, error: string): Citation {
@@ -150,7 +167,7 @@ function conclusionFor(panel: PanelConfig, metrics: SeriesResult[], news: NewsIt
   const changeText = change === undefined
     ? "freshness is available but change history is limited"
     : `${change >= 0 ? "+" : ""}${formatNumber(change, topMetric.config.transform === "rate" || topMetric.config.transform === "spread" ? topMetric.config.unit : "percent")} on the relevant lookback`;
-  return `${panel.title}: ${topMetric.config.label} is ${formatNumber(topMetric.stats.latest, topMetric.config.unit)} as of ${topMetric.stats.latestDate}; ${changeText}.`;
+  return `${panel.title}: ${topMetric.config.label} is ${formatMetricNumber(topMetric)} as of ${topMetric.stats.latestDate}; ${changeText}.`;
 }
 
 async function resolveSeries(config: NonNullable<PanelConfig["series"]>[number], force = false): Promise<SeriesResult> {
@@ -259,22 +276,36 @@ function flattenPanelConfigs(panels: PanelConfig[]): PanelConfig[] {
 async function cachedObservations(seriesIds: string[]) {
   const supabase = getSupabaseAdmin();
   if (!supabase || !seriesIds.length) return new Map<string, Observation[]>();
-  const { data } = await supabase
-    .from("macro_observations")
-    .select("series_id,observation_date,value,source_retrieved_at,source_url,metadata")
-    .in("series_id", seriesIds)
-    .order("observation_date", { ascending: true });
   const grouped = new Map<string, Observation[]>();
-  for (const row of data ?? []) {
-    const list = grouped.get(row.series_id) ?? [];
-    list.push({
-      date: row.observation_date,
-      value: Number(row.value),
-      sourceRetrievedAt: row.source_retrieved_at,
-      sourceUrl: row.source_url
-    } as Observation & { sourceRetrievedAt?: string; sourceUrl?: string });
-    grouped.set(row.series_id, list);
-  }
+  const uniqueSeriesIds = [...new Set(seriesIds)];
+  await mapLimit(uniqueSeriesIds, 6, async (seriesId) => {
+    const result = await withTimeout(
+      `macro observation cache read for ${seriesId}`,
+      supabase
+        .from("macro_observations")
+        .select("series_id,observation_date,value,source_retrieved_at,source_url,metadata")
+        .eq("series_id", seriesId)
+        .order("observation_date", { ascending: false })
+        .limit(Number(process.env.DASHBOARD_SERIES_HISTORY_LIMIT ?? 520))
+    );
+    if (!result) return;
+    const { data, error } = result;
+    if (error) {
+      console.error(`macro observation cache read failed for ${seriesId}: ${error.message}`);
+      return;
+    }
+    grouped.set(
+      seriesId,
+      (data ?? [])
+        .map((row) => ({
+          date: row.observation_date,
+          value: Number(row.value),
+          sourceRetrievedAt: row.source_retrieved_at,
+          sourceUrl: row.source_url
+        }) as Observation & { sourceRetrievedAt?: string; sourceUrl?: string })
+        .sort((a, b) => a.date.localeCompare(b.date))
+    );
+  });
   return grouped;
 }
 
@@ -282,12 +313,21 @@ async function cachedNews(panel: PanelConfig): Promise<NewsItem[]> {
   const supabase = getSupabaseAdmin();
   const sourceIds = [...new Set((panel.newsFeeds ?? []).map((feed) => feed.sourceId))];
   if (!supabase || !sourceIds.length) return [];
-  const { data } = await supabase
-    .from("news_items")
-    .select("*")
-    .in("source_id", sourceIds)
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .limit(8);
+  const result = await withTimeout(
+    "news cache read",
+    supabase
+      .from("news_items")
+      .select("*")
+      .in("source_id", sourceIds)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(8)
+  );
+  if (!result) return [];
+  const { data, error } = result;
+  if (error) {
+    console.error(`news cache read failed: ${error.message}`);
+    return [];
+  }
   return (data ?? []).map((item) => ({
     id: item.id,
     title: item.title,
@@ -388,10 +428,19 @@ async function resolveCachedPanel(panel: PanelConfig, observationMap: Map<string
 async function sourceHealthFromDb(): Promise<SourceHealth[]> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
-  const { data } = await supabase
-    .from("source_health")
-    .select("*")
-    .order("checked_at", { ascending: false });
+  const result = await withTimeout(
+    "source health read",
+    supabase
+      .from("source_health")
+      .select("*")
+      .order("checked_at", { ascending: false })
+  );
+  if (!result) return [];
+  const { data, error } = result;
+  if (error) {
+    console.error(`source health read failed: ${error.message}`);
+    return [];
+  }
   return (data ?? []).map((item) => ({
     sourceId: item.source_id,
     ok: item.ok,
@@ -492,19 +541,25 @@ async function persistDataSourceDefinitions(sourceIds: string[]) {
   const sourceIdSet = new Set(sourceIds);
   const sources = DATA_SOURCES.filter((source) => sourceIdSet.has(source.id));
   if (!supabase || !sources.length) return;
-  const { error } = await supabase.from("data_sources").upsert(
-    sources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      kind: source.kind,
-      base_url: source.baseUrl,
-      human_url: source.humanUrl,
-      cadence: source.cadence,
-      requires_key: source.requiresKey ?? false,
-      notes: source.notes ?? null,
-      updated_at: new Date().toISOString()
-    }))
+  const result = await withTimeout(
+    "data source definition write",
+    supabase.from("data_sources").upsert(
+      sources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        kind: source.kind,
+        base_url: source.baseUrl,
+        human_url: source.humanUrl,
+        cadence: source.cadence,
+        requires_key: source.requiresKey ?? false,
+        notes: source.notes ?? null,
+        updated_at: new Date().toISOString()
+      }))
+    ),
+    12000
   );
+  if (!result) throw new Error("Failed to persist data source definitions: request timed out");
+  const { error } = result;
   if (error) throw new Error(`Failed to persist data source definitions: ${error.message}`);
 }
 
@@ -513,22 +568,28 @@ export async function persistSeriesDefinitions(configs: SeriesConfig[]) {
   if (!supabase || !configs.length) return;
   const series = [...new Map(configs.map((config) => [config.id, config])).values()];
   await persistDataSourceDefinitions([...new Set(series.map((config) => config.sourceId))]);
-  const { error } = await supabase.from("macro_series").upsert(
-    series.map((config) => ({
-      id: config.id,
-      label: config.label,
-      source_id: config.sourceId,
-      source_series_id: config.fredSeriesId ?? config.marketSymbol ?? config.treasury?.valueField ?? config.alphaVantage?.symbol ?? config.cftc?.marketName ?? config.id,
-      unit: config.unit,
-      frequency: config.frequency,
-      source_url: config.sourceUrl,
-      human_url: config.humanUrl,
-      description: config.description,
-      tags: config.tags,
-      importance: config.importance,
-      updated_at: new Date().toISOString()
-    }))
+  const result = await withTimeout(
+    "macro series definition write",
+    supabase.from("macro_series").upsert(
+      series.map((config) => ({
+        id: config.id,
+        label: config.label,
+        source_id: config.sourceId,
+        source_series_id: config.fredSeriesId ?? config.marketSymbol ?? config.treasury?.valueField ?? config.alphaVantage?.symbol ?? config.cftc?.marketName ?? config.id,
+        unit: config.unit,
+        frequency: config.frequency,
+        source_url: config.sourceUrl,
+        human_url: config.humanUrl,
+        description: config.description,
+        tags: config.tags,
+        importance: config.importance,
+        updated_at: new Date().toISOString()
+      }))
+    ),
+    12000
   );
+  if (!result) throw new Error("Failed to persist series definitions: request timed out");
+  const { error } = result;
   if (error) throw new Error(`Failed to persist series definitions: ${error.message}`);
 }
 
@@ -538,18 +599,23 @@ export async function persistObservations(results: SeriesResult[]) {
   await persistSeriesDefinitions(results.map((result) => result.config));
   for (const result of results) {
     if (!result.observations.length) continue;
-    const { error } = await supabase.from("macro_observations").upsert(
-      result.observations.map((observation: Observation) => ({
-        series_id: result.config.id,
-        observation_date: observation.date,
-        value: observation.value,
-        source_retrieved_at: result.citation.retrievedAt,
-        source_url: result.citation.sourceUrl,
-        metadata: result.citation.metadata ?? {}
-      })),
-      { onConflict: "series_id,observation_date" }
+    const write = await withTimeout(
+      `macro observations write for ${result.config.id}`,
+      supabase.from("macro_observations").upsert(
+        result.observations.map((observation: Observation) => ({
+          series_id: result.config.id,
+          observation_date: observation.date,
+          value: observation.value,
+          source_retrieved_at: result.citation.retrievedAt,
+          source_url: result.citation.sourceUrl,
+          metadata: result.citation.metadata ?? {}
+        })),
+        { onConflict: "series_id,observation_date" }
+      ),
+      15000
     );
-    if (error) throw new Error(`Failed to persist observations for ${result.config.id}: ${error.message}`);
+    if (!write) throw new Error(`Failed to persist observations for ${result.config.id}: request timed out`);
+    if (write.error) throw new Error(`Failed to persist observations for ${result.config.id}: ${write.error.message}`);
   }
 }
 
