@@ -123,15 +123,6 @@ export function DashboardShell({
     });
   }
 
-  function toggleFavorite(id: string) {
-    setFavorites((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function loadTab(tab: TabId, force = false) {
     if (busy) return;
     const label = tabs.find((item) => item.id === tab)?.label ?? "tab";
@@ -311,8 +302,6 @@ export function DashboardShell({
               isExpanded={(id) => expanded.has(id)}
               onToggle={togglePanel}
               tab={snapshot.tab}
-              isFavorite={(id) => favorites.has(id)}
-              onFavoriteToggle={toggleFavorite}
             />
           ))}
         </section>
