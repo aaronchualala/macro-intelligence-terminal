@@ -195,7 +195,7 @@ async function resolveSeries(config: NonNullable<PanelConfig["series"]>[number],
 }
 
 async function resolvePanel(panel: PanelConfig, force = false): Promise<PanelSnapshot> {
-  const maxSeries = panel.tags.includes("correlation") ? 5 : 2;
+  const maxSeries = panel.id === "prices" ? 12 : panel.tags.includes("correlation") ? 5 : 2;
   const seriesForInitialSnapshot = [...(panel.series ?? [])]
     .sort((a, b) => b.importance - a.importance)
     .slice(0, maxSeries);
@@ -265,7 +265,7 @@ async function resolvePanel(panel: PanelConfig, force = false): Promise<PanelSna
 function selectedPanelSeries(panel: PanelConfig, scope: RefreshScope | "ui" = "ui") {
   const sourceSeries = (panel.series ?? []).filter((series) => !RETIRED_FRED_SERIES.has(series.fredSeriesId ?? ""));
   if (scope === "all") return sourceSeries;
-  const maxSeries = panel.tags.includes("correlation") ? 6 : 2;
+  const maxSeries = panel.id === "prices" ? 12 : panel.tags.includes("correlation") ? 6 : 2;
   return [...sourceSeries].sort((a, b) => b.importance - a.importance).slice(0, maxSeries);
 }
 

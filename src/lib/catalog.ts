@@ -318,28 +318,15 @@ const pricesPanel: PanelConfig = {
     fred("PCEPILFE", "PCE core", "index", "index", "Core PCE price index.", 92, ["pce", "core"], "higher_is_hotter"),
     fred("PPIACO", "PPI all commodities", "index", "index", "Producer price index: all commodities.", 58, ["ppi"], "higher_is_hotter"),
     fred("T10YIE", "10Y breakeven inflation", "percent", "rate", "Market-implied 10-year inflation compensation.", 78, ["breakeven"], "higher_is_hotter"),
-    fred("T5YIE", "5Y breakeven inflation", "percent", "rate", "Market-implied 5-year inflation compensation.", 72, ["breakeven"], "higher_is_hotter")
-  ],
-  children: [
-    {
-      id: "prices-cpi",
-      title: "CPI Decomposition",
-      summary: "Headline/core CPI with shelter, energy, goods, and services proxies.",
-      description: "Deep CPI layer for inflation breadth and persistence. Shelter and services matter most for Fed reaction risk.",
-      importance: 92,
-      tags: ["cpi", "decomposition"],
-      series: [
-        fred("CUSR0000SAH1", "CPI shelter", "index", "index", "CPI shelter component.", 86, ["shelter"], "higher_is_hotter"),
-        fred("CPIENGSL", "CPI energy", "index", "index", "CPI energy component.", 70, ["energy"], "higher_is_hotter"),
-        fred("CUSR0000SACL1E", "CPI commodities ex food/energy", "index", "index", "Core goods CPI proxy.", 72, ["goods"], "higher_is_hotter"),
-        fred("CUSR0000SASLE", "CPI services less energy", "index", "index", "Services CPI proxy.", 82, ["services"], "higher_is_hotter"),
-        fred("CPIUFDSL", "CPI food", "index", "index", "CPI food component.", 65, ["food"], "higher_is_hotter")
-      ],
-      methodology: "Component heat is based on YoY, MoM, and 3-month annualized inflation where frequency permits."
-    }
+    fred("T5YIE", "5Y breakeven inflation", "percent", "rate", "Market-implied 5-year inflation compensation.", 72, ["breakeven"], "higher_is_hotter"),
+    fred("CUSR0000SAH1", "CPI shelter", "index", "index", "CPI shelter component.", 86, ["shelter"], "higher_is_hotter"),
+    fred("CPIENGSL", "CPI energy", "index", "index", "CPI energy component.", 70, ["energy"], "higher_is_hotter"),
+    fred("CUSR0000SACL1E", "CPI commodities ex food/energy", "index", "index", "Core goods CPI proxy.", 72, ["goods"], "higher_is_hotter"),
+    fred("CUSR0000SASLE", "CPI services less energy", "index", "index", "Services CPI proxy.", 82, ["services"], "higher_is_hotter"),
+    fred("CPIUFDSL", "CPI food", "index", "index", "CPI food component.", 65, ["food"], "higher_is_hotter")
   ],
   newsFeeds: [officialFeeds.bls, officialFeeds.bea],
-  methodology: "Inflation heat uses YoY, MoM, 3-month annualized rates, z-scores, and percentile rankings across the available public history."
+  methodology: "Inflation heat uses YoY, MoM, 3-month annualized rates, z-scores, percentile rankings, CPI components, and market-implied breakevens across the available public history."
 };
 
 const businessPanel: PanelConfig = {

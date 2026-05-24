@@ -134,7 +134,7 @@ function sourceCitation(config: SeriesConfig, retrievedAt: string, sourceUrl: st
 function selectedPanelSeries(panel: PanelConfig, scope: RefreshScope) {
   const sourceSeries = (panel.series ?? []).filter((series) => !RETIRED_FRED_SERIES.has(series.fredSeriesId ?? ""));
   if (scope === "all") return sourceSeries;
-  const maxSeries = panel.tags.includes("correlation") ? 6 : 2;
+  const maxSeries = panel.id === "prices" ? 12 : panel.tags.includes("correlation") ? 6 : 2;
   return [...sourceSeries].sort((a, b) => b.importance - a.importance).slice(0, maxSeries);
 }
 
