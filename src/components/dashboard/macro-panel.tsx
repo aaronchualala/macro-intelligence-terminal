@@ -14,7 +14,7 @@ import {
 import { useState } from "react";
 
 import { CorrelationChart } from "@/components/dashboard/charts";
-import { MetricDetail, MetricStrip } from "@/components/dashboard/metric-grid";
+import { MetricTable } from "@/components/dashboard/metric-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PanelSnapshot } from "@/lib/types";
@@ -232,23 +232,7 @@ export function MacroPanel({
                 </div>
               </div>
               {aiSummary ? <div className="border border-neutral-800 bg-black p-3 text-sm leading-6 text-neutral-200">{aiSummary}</div> : null}
-              <MetricStrip metrics={panel.metrics} />
-              <div className="grid gap-3 lg:grid-cols-3">
-                {(["24h", "7d", "30d"] as const).map((windowKey) => (
-                  <div key={windowKey} className="border border-neutral-800 bg-black p-3">
-                    <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Changed {windowKey}</div>
-                    {panel.whatChanged[windowKey].length ? (
-                      <ul className="space-y-1 text-xs leading-5 text-neutral-300">
-                        {panel.whatChanged[windowKey].map((line) => (
-                          <li key={line}>{line}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-neutral-500">No comparable live observations.</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <MetricTable metrics={panel.metrics} />
               <ScenarioTree panel={panel} />
               <CorrelationBlock panel={panel} />
               {panel.actors.length || panel.catalysts.length ? (
@@ -272,11 +256,6 @@ export function MacroPanel({
                 </div>
               ) : null}
               <NewsBlock panel={panel} />
-              <div className="grid gap-3">
-                {panel.metrics.map((metric) => (
-                  <MetricDetail key={metric.config.id} metric={metric} />
-                ))}
-              </div>
               {panel.methodology ? (
                 <div className="border border-neutral-800 bg-black p-3">
                   <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Methodology</div>
