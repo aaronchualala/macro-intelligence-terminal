@@ -186,6 +186,12 @@ export function MacroPanel({
               <span className="text-[11px] uppercase tracking-wide text-neutral-200">{panel.regime}</span>
             </div>
             <p className="line-clamp-2 text-xs leading-5 text-neutral-200">{panel.conclusion}</p>
+            {panel.methodology ? (
+              <p className={`mt-2 text-[11px] leading-5 text-neutral-400 ${expanded ? "" : "line-clamp-2"}`}>
+                <span className="uppercase tracking-wide text-neutral-500">Methodology </span>
+                {panel.methodology}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="hidden min-w-[190px] self-center text-right md:block">
@@ -203,32 +209,16 @@ export function MacroPanel({
             className="overflow-hidden border-t border-neutral-800"
           >
             <div className="grid gap-3 p-3 md:p-4">
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-                <div className="min-w-0">
-                  <p className="text-sm leading-6 text-neutral-300">{panel.description}</p>
-                </div>
-                <div className="grid gap-2 border border-neutral-800 bg-black p-3 text-xs text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="uppercase tracking-wide">Regime</span>
-                    <span className="text-right text-neutral-100">{panel.regime}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="uppercase tracking-wide">Freshness</span>
-                    <span className="text-neutral-100">{freshnessLabel(panel.retrievedAt)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="uppercase tracking-wide">Sources</span>
-                    <span className="text-neutral-100">{panel.citations.length}</span>
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button type="button" variant="secondary" onClick={(event) => { event.stopPropagation(); summarize(); }} disabled={aiLoading}>
-                      <Bot className="h-4 w-4" />
-                      {aiLoading ? "Summarizing" : "AI Summary"}
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={(event) => { event.stopPropagation(); onFavoriteToggle(panel.id); }}>
-                      {favorite ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
-                    </Button>
-                  </div>
+              <div className="grid gap-3">
+                <p className="text-sm leading-6 text-neutral-300">{panel.description}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={(event) => { event.stopPropagation(); summarize(); }} disabled={aiLoading}>
+                    <Bot className="h-4 w-4" />
+                    {aiLoading ? "Summarizing" : "AI Summary"}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={(event) => { event.stopPropagation(); onFavoriteToggle(panel.id); }}>
+                    {favorite ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
+                  </Button>
                 </div>
               </div>
               {aiSummary ? <div className="border border-neutral-800 bg-black p-3 text-sm leading-6 text-neutral-200">{aiSummary}</div> : null}
@@ -256,29 +246,6 @@ export function MacroPanel({
                 </div>
               ) : null}
               <NewsBlock panel={panel} />
-              {panel.methodology ? (
-                <div className="border border-neutral-800 bg-black p-3">
-                  <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Methodology</div>
-                  <p className="text-xs leading-5 text-neutral-300">{panel.methodology}</p>
-                </div>
-              ) : null}
-              <div className="border border-neutral-800 bg-black p-3">
-                <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Sources</div>
-                <div className="grid gap-1">
-                  {panel.citations.slice(0, 18).map((citation, index) => (
-                    <a
-                      key={`${citation.sourceUrl}-${index}`}
-                      href={citation.humanUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 items-center justify-between gap-3 border border-transparent px-2 py-1 text-xs text-neutral-400 hover:border-neutral-800 hover:text-neutral-100"
-                    >
-                      <span className="min-w-0 truncate">{citation.title ?? citation.sourceName}</span>
-                      <span className="shrink-0 text-[11px] uppercase tracking-wide">{freshnessLabel(citation.retrievedAt)}</span>
-                    </a>
-                  ))}
-                </div>
-              </div>
               {panel.children.length ? (
                 <div className="grid gap-2 border-l border-neutral-800 pl-2 md:pl-4">
                   {panel.children.map((child) => (
