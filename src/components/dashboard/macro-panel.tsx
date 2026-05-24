@@ -20,6 +20,26 @@ function dataAvailabilityLabel(confidence: string) {
   return `${normalized} Data Availability`;
 }
 
+function importanceScore(importance: number) {
+  return (importance / 10).toFixed(1);
+}
+
+function importanceExplanation(panel: PanelSnapshot) {
+  return `Current importance is ${importanceScore(panel.importance)} / 10 because ${panel.title} has a configured near-term market relevance score of ${panel.importance}/100, based on decision urgency, cross-asset sensitivity, and usefulness for the current dashboard regime.`;
+}
+
+function dataAvailabilityExplanation(panel: PanelSnapshot) {
+  const available = panel.metrics.filter((metric) => metric.confidence !== "unavailable").length;
+  const total = panel.metrics.length;
+  const basis = total ? `${available} of ${total} tracked series currently have usable observations` : `${panel.news.length} recent source items are available`;
+  return `${dataAvailabilityLabel(panel.confidence)} is assigned because ${basis}. The rating rises as more source-backed series/news items are fresh and falls when data is missing, stale, or source requests fail.`;
+}
+
+function regimeExplanation(panel: PanelSnapshot) {
+  const method = panel.methodology ? ` Methodology: ${panel.methodology}` : "";
+  return `Regime is ${panel.regime}. The dashboard derives this by applying the panel methodology to current z-scores, percentile ranks, direction of change, and stress/easing polarity across the available series.${method}`;
+}
+
 function ScenarioTree({ panel }: { panel: PanelSnapshot }) {
   if (!panel.scenarios.length) return null;
   return (
@@ -132,12 +152,18 @@ export function MacroPanel({
         </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-400">
-              Importance Ranking {panel.importance}
+            <span
+              className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-400"
+              title={importanceExplanation(panel)}
+            >
+              Current Importance {importanceScore(panel.importance)} / 10
             </span>
-            <Badge className="normal-case text-[11px]">
-              {dataAvailabilityLabel(panel.confidence)}
-            </Badge>
+            <span
+              className="inline-flex h-5 max-w-full items-center border border-neutral-800 bg-neutral-950 px-1.5 text-[10px] font-medium uppercase leading-none tracking-wide text-neutral-400"
+              title={regimeExplanation(panel)}
+            >
+              Regime {panel.regime}
+            </span>
             {panel.timeHorizon ? <Badge>{panel.timeHorizon}</Badge> : null}
             {panel.tags.slice(0, 4).map((tag) => (
               <Badge key={tag}>{tag}</Badge>
@@ -149,19 +175,20 @@ export function MacroPanel({
             {panel.description ? <span> {panel.description}</span> : null}
           </p>
           <div className="mt-3 border-l border-neutral-700 bg-black/25 py-2 pl-3">
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-neutral-400">Regime</span>
-              <span className="text-[11px] uppercase tracking-wide text-neutral-400">{panel.regime}</span>
-            </div>
             {panel.methodology ? (
-              <p className={`mt-2 text-[11px] leading-5 text-neutral-400 ${expanded ? "" : "line-clamp-2"}`}>
+              <p className={`text-[11px] leading-5 text-neutral-400 ${expanded ? "" : "line-clamp-2"}`}>
                 <span className="uppercase tracking-wide text-neutral-400">Methodology </span>
                 {panel.methodology}
               </p>
             ) : null}
           </div>
         </div>
-        <div className="hidden min-w-[190px] self-center text-right md:block">
+        <div className="col-span-2 min-w-[190px] self-center text-left md:col-span-1 md:text-right">
+          <div className="mb-2 flex md:justify-end">
+            <Badge className="normal-case text-[11px]" title={dataAvailabilityExplanation(panel)}>
+              {dataAvailabilityLabel(panel.confidence)}
+            </Badge>
+          </div>
           <div className="text-sm tabular-nums text-neutral-400">{panel.citations.length} sources</div>
           <div className="mt-1 text-[11px] text-neutral-400">retrieved {freshnessLabel(panel.retrievedAt)}</div>
         </div>
