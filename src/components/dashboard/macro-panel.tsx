@@ -15,13 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import type { PanelSnapshot } from "@/lib/types";
 import { freshnessLabel } from "@/lib/utils";
 
-function confidenceTone(confidence: string) {
-  if (confidence === "high") return "good" as const;
-  if (confidence === "medium") return "warn" as const;
-  if (confidence === "low") return "warn" as const;
-  return "risk" as const;
-}
-
 function dataAvailabilityLabel(confidence: string) {
   const normalized = confidence.charAt(0).toUpperCase() + confidence.slice(1);
   return `${normalized} Data Availability`;
@@ -43,7 +36,7 @@ function ScenarioTree({ panel }: { panel: PanelSnapshot }) {
               <span className="text-lg font-semibold tabular-nums">{Math.round(scenario.probability * 100)}%</span>
             </div>
             <p className="text-xs leading-5 text-neutral-400">{scenario.description}</p>
-            <p className="mt-2 text-xs leading-5 text-neutral-300">{scenario.marketPath}</p>
+            <p className="mt-2 text-xs leading-5 text-neutral-400">{scenario.marketPath}</p>
             <div className="mt-3 flex flex-wrap gap-1">
               {scenario.triggers.slice(0, 4).map((trigger) => (
                 <Badge key={trigger}>{trigger}</Badge>
@@ -139,10 +132,10 @@ export function MacroPanel({
         </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-300">
+            <span className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-400">
               Importance Ranking {panel.importance}
             </span>
-            <Badge tone={confidenceTone(panel.confidence)} className="normal-case text-[11px]">
+            <Badge className="normal-case text-[11px]">
               {dataAvailabilityLabel(panel.confidence)}
             </Badge>
             {panel.timeHorizon ? <Badge>{panel.timeHorizon}</Badge> : null}
@@ -150,28 +143,27 @@ export function MacroPanel({
               <Badge key={tag}>{tag}</Badge>
             ))}
           </div>
-          <h3 className="truncate text-base font-semibold text-neutral-50 md:text-lg">{panel.title}</h3>
+          <h3 className="truncate text-base font-semibold text-neutral-400 md:text-lg">{panel.title}</h3>
           <p className="mt-1 line-clamp-3 text-sm leading-5 text-neutral-400">
             {panel.summary}
-            {panel.description ? <span className="text-neutral-300"> {panel.description}</span> : null}
+            {panel.description ? <span> {panel.description}</span> : null}
           </p>
           <div className="mt-3 border-l border-neutral-700 bg-black/25 py-2 pl-3">
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-neutral-500">Regime</span>
-              <span className="text-[11px] uppercase tracking-wide text-neutral-200">{panel.regime}</span>
+              <span className="text-[10px] uppercase tracking-wide text-neutral-400">Regime</span>
+              <span className="text-[11px] uppercase tracking-wide text-neutral-400">{panel.regime}</span>
             </div>
-            <p className="line-clamp-2 text-xs leading-5 text-neutral-200">{panel.conclusion}</p>
             {panel.methodology ? (
               <p className={`mt-2 text-[11px] leading-5 text-neutral-400 ${expanded ? "" : "line-clamp-2"}`}>
-                <span className="uppercase tracking-wide text-neutral-500">Methodology </span>
+                <span className="uppercase tracking-wide text-neutral-400">Methodology </span>
                 {panel.methodology}
               </p>
             ) : null}
           </div>
         </div>
         <div className="hidden min-w-[190px] self-center text-right md:block">
-          <div className="text-sm tabular-nums text-neutral-200">{panel.citations.length} sources</div>
-          <div className="mt-1 text-[11px] text-neutral-500">retrieved {freshnessLabel(panel.retrievedAt)}</div>
+          <div className="text-sm tabular-nums text-neutral-400">{panel.citations.length} sources</div>
+          <div className="mt-1 text-[11px] text-neutral-400">retrieved {freshnessLabel(panel.retrievedAt)}</div>
         </div>
       </button>
       <AnimatePresence initial={false}>
