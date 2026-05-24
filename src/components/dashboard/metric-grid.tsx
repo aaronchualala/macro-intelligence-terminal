@@ -5,25 +5,12 @@ import { ArrowDown, ArrowRight, ArrowUp, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TimeSeriesChart } from "@/components/dashboard/charts";
 import type { SeriesResult } from "@/lib/types";
-import { formatDate, formatNumber, freshnessLabel } from "@/lib/utils";
+import { formatDate, formatMetricNumber, formatNumber, freshnessLabel, metricDisplayUnit } from "@/lib/utils";
 
 function DirectionIcon({ direction }: { direction?: string }) {
   if (direction === "up") return <ArrowUp className="h-3.5 w-3.5" />;
   if (direction === "down") return <ArrowDown className="h-3.5 w-3.5" />;
   return <ArrowRight className="h-3.5 w-3.5" />;
-}
-
-function metricUnit(metric: SeriesResult) {
-  if (metric.config.unit !== "index/price") return metric.config.unit;
-  const symbol = metric.config.marketSymbol ?? "";
-  if (symbol.startsWith("^")) return "index pts";
-  if (symbol.endsWith("=X")) return "FX rate";
-  if (symbol.endsWith("-USD")) return "USD";
-  return "USD/share";
-}
-
-function formatMetricValue(metric: SeriesResult, value = metric.stats.latest) {
-  return formatNumber(value, metricUnit(metric));
 }
 
 export function MetricStrip({ metrics }: { metrics: SeriesResult[] }) {
@@ -42,7 +29,7 @@ export function MetricStrip({ metrics }: { metrics: SeriesResult[] }) {
             <DirectionIcon direction={metric.stats.direction} />
           </div>
           <div className="truncate text-lg font-semibold tabular-nums text-neutral-50">
-            {formatMetricValue(metric)}
+            {formatMetricNumber(metric)}
           </div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-neutral-500">
             <span>{formatDate(metric.stats.latestDate)}</span>
@@ -85,13 +72,13 @@ export function MetricDetail({ metric }: { metric: SeriesResult }) {
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <TimeSeriesChart data={metric.observations} unit={metricUnit(metric)} />
+        <TimeSeriesChart data={metric.observations} unit={metricDisplayUnit(metric.config)} />
       </div>
       <div className="grid content-start gap-px overflow-hidden border border-neutral-800 bg-neutral-800 text-xs">
         {[
-          ["Latest", formatMetricValue(metric)],
+          ["Latest", formatMetricNumber(metric)],
           ["Latest date", formatDate(metric.stats.latestDate)],
-          ["Prior", formatMetricValue(metric, metric.stats.prior)],
+          ["Prior", formatMetricNumber(metric, metric.stats.prior)],
           ["MoM", formatNumber(metric.stats.mom, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
           ["YoY", formatNumber(metric.stats.yoy, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
           ["3m ann.", formatNumber(metric.stats.threeMonthAnnualized, metric.config.transform === "rate" || metric.config.transform === "spread" ? metric.config.unit : "percent")],
