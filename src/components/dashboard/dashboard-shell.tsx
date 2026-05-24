@@ -6,13 +6,11 @@ import {
   DatabaseZap,
   Heart,
   RefreshCw,
-  Search,
-  ShieldCheck
+  Search
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { MacroPanel } from "@/components/dashboard/macro-panel";
-import { MetricStrip } from "@/components/dashboard/metric-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DashboardSnapshot, PanelSnapshot, TabId } from "@/lib/types";
@@ -37,6 +35,12 @@ function filterPanels(panels: PanelSnapshot[], query: string, favoritesOnly: boo
         panel.metrics.some((metric) => metric.config.label.toLowerCase().includes(normalized));
       return (matchesFavorite && matchesQuery) || panel.children.length > 0;
     });
+}
+
+async function fetchSnapshot(tab: TabId, force = false) {
+  const response = await fetch(`/api/dashboard?tab=${tab}${force ? "&force=1" : ""}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Could not load ${tab}: ${response.status}`);
+  return (await response.json()) as DashboardSnapshot;
 }
 
 export function DashboardShell({
@@ -128,12 +132,6 @@ export function DashboardShell({
     });
   }
 
-  async function fetchSnapshot(tab: TabId, force = false) {
-    const response = await fetch(`/api/dashboard?tab=${tab}${force ? "&force=1" : ""}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Could not load ${tab}: ${response.status}`);
-    return (await response.json()) as DashboardSnapshot;
-  }
-
   async function loadTab(tab: TabId, force = false) {
     if (busy) return;
     const label = tabs.find((item) => item.id === tab)?.label ?? "tab";
@@ -188,12 +186,13 @@ export function DashboardShell({
       setSnapshot(data);
       setExpanded(new Set());
       const sourceIssues = result.errors?.length ?? 0;
+      const visibleSeries = flatten(data.panels).reduce((count, panel) => count + panel.metrics.length, 0);
       if (sourceIssues) {
         setRefreshMessage(`Refresh finished with ${sourceIssues} source issue${sourceIssues === 1 ? "" : "s"}.`);
-      } else if (!data.topMetrics.length) {
+      } else if (!visibleSeries) {
         setRefreshMessage("Refresh finished, but no metrics were cached. Check the refresh token and source health.");
       } else {
-        setRefreshMessage(`Refresh complete: ${result.refreshedSeries ?? data.topMetrics.length} series updated.`);
+        setRefreshMessage(`Refresh complete: ${result.refreshedSeries ?? visibleSeries} series updated.`);
       }
     } catch (error) {
       setRefreshMessage(error instanceof Error ? error.message : String(error));
@@ -217,9 +216,9 @@ export function DashboardShell({
         </div>
       ) : null}
       <div className={`mx-auto flex max-w-[1900px] flex-col gap-3 p-3 md:p-4 xl:p-5 ${busy ? "pointer-events-none select-none" : ""}`}>
-        <header className="grid gap-3 border-b border-neutral-900 pb-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+        <header className="grid gap-3 border-b border-neutral-900/90 pb-3 xl:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-500">
               <span>{process.env.NEXT_PUBLIC_APP_NAME ?? "Macro Intelligence"}</span>
               <span>Generated {freshnessLabel(snapshot.generatedAt)}</span>
               <Badge tone={snapshot.globalRegime.includes("tight") ? "risk" : snapshot.globalRegime.includes("easing") ? "good" : "neutral"}>
@@ -233,7 +232,7 @@ export function DashboardShell({
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[440px]">
-            <div className="flex items-center gap-2 border border-neutral-800 bg-black px-2">
+            <div className="flex items-center gap-2 border border-neutral-800 bg-[#070707] px-2 transition focus-within:border-neutral-500">
               <Search className="h-4 w-4 shrink-0 text-neutral-500" />
               <input
                 value={query}
@@ -250,14 +249,14 @@ export function DashboardShell({
           </div>
         </header>
 
-        <nav className="terminal-scrollbar flex gap-px overflow-x-auto border border-neutral-800 bg-neutral-800">
+        <nav className="terminal-scrollbar flex gap-px overflow-x-auto border border-neutral-800 bg-neutral-800/80">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => loadTab(tab.id)}
               disabled={busy}
               className={`h-10 shrink-0 px-3 text-xs font-medium uppercase tracking-wide transition ${
-                tab.id === snapshot.tab ? "bg-neutral-100 text-black" : "bg-[#080808] text-neutral-300 hover:bg-neutral-950"
+                tab.id === snapshot.tab ? "bg-neutral-100 text-black" : "bg-[#080808] text-neutral-300 hover:bg-neutral-950 hover:text-neutral-100"
               }`}
             >
               {tab.label}
@@ -265,38 +264,24 @@ export function DashboardShell({
           ))}
         </nav>
 
-        <section className="border border-neutral-900 bg-black px-3 py-2">
+        <section className="border-l border-neutral-700 bg-[#080808] px-3 py-2">
           <p className="max-w-6xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
         </section>
 
-        <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_390px]">
-          <div className="min-w-0">
-            <MetricStrip metrics={snapshot.topMetrics} />
-          </div>
-          <aside className="grid gap-px overflow-hidden border border-neutral-800 bg-neutral-800">
-            <div className="bg-black p-3">
-              <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-500">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Regime conclusions
-              </div>
-              <ul className="space-y-2 text-xs leading-5 text-neutral-300">
-                {snapshot.topConclusions.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            {refreshMessage ? <div className="bg-black px-3 py-2 text-xs text-neutral-400">{refreshMessage}</div> : null}
+        {refreshMessage || snapshot.errors.length ? (
+          <section className="grid gap-px overflow-hidden border border-neutral-800 bg-neutral-800 text-xs">
+            {refreshMessage ? <div className="bg-black px-3 py-2 text-neutral-400">{refreshMessage}</div> : null}
             {snapshot.errors.length ? (
-              <div className="bg-black px-3 py-2 text-xs leading-5 text-yellow-200">
+              <div className="bg-black px-3 py-2 leading-5 text-yellow-200">
                 {snapshot.errors.slice(0, 3).map((error) => (
                   <div key={error}>{error}</div>
                 ))}
               </div>
             ) : null}
-          </aside>
-        </section>
+          </section>
+        ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-neutral-900 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-neutral-900/90 py-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={() => setExpanded(new Set(allPanelIds))}>
               <ChevronDownSquare className="h-4 w-4" />
@@ -317,7 +302,7 @@ export function DashboardShell({
           </div>
         </div>
 
-        <section className="grid gap-2">
+        <section className="grid gap-2.5">
           {visiblePanels.map((panel) => (
             <MacroPanel
               key={panel.id}
