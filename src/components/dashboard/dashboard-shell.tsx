@@ -206,7 +206,7 @@ export function DashboardShell({
   const totalHealth = snapshot.sourceHealth.length;
 
   return (
-    <main className="min-h-screen bg-[#050505] text-neutral-100">
+    <main className="terminal-backdrop min-h-screen text-neutral-100">
       {busy ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 backdrop-blur-[1px]" aria-live="polite" aria-busy="true">
           <div className="flex items-center gap-3 border border-neutral-700 bg-black/85 px-4 py-3 text-xs uppercase tracking-wide text-neutral-200 shadow-2xl">
@@ -216,7 +216,7 @@ export function DashboardShell({
         </div>
       ) : null}
       <div className={`mx-auto flex max-w-[1900px] flex-col gap-3 p-3 md:p-4 xl:p-5 ${busy ? "pointer-events-none select-none" : ""}`}>
-        <header className="grid gap-3 border-b border-neutral-900/90 pb-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+        <header className="sticky top-0 z-40 -mx-3 grid gap-3 border-b border-neutral-800/80 bg-[#050505]/95 px-3 py-3 shadow-[0_14px_30px_rgba(0,0,0,0.32)] backdrop-blur md:-mx-4 md:px-4 xl:-mx-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:px-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-500">
               <span>{process.env.NEXT_PUBLIC_APP_NAME ?? "Macro Intelligence"}</span>
@@ -232,7 +232,7 @@ export function DashboardShell({
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[440px]">
-            <div className="flex items-center gap-2 border border-neutral-800 bg-[#070707] px-2 transition focus-within:border-neutral-500">
+            <div className="flex items-center gap-2 border border-neutral-800 bg-[#070707] px-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition focus-within:border-neutral-500">
               <Search className="h-4 w-4 shrink-0 text-neutral-500" />
               <input
                 value={query}
@@ -249,14 +249,14 @@ export function DashboardShell({
           </div>
         </header>
 
-        <nav className="terminal-scrollbar flex gap-px overflow-x-auto border border-neutral-800 bg-neutral-800/80">
+        <nav className="terminal-scrollbar flex gap-px overflow-x-auto border border-neutral-800 bg-neutral-800/80 shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => loadTab(tab.id)}
               disabled={busy}
               className={`h-10 shrink-0 px-3 text-xs font-medium uppercase tracking-wide transition ${
-                tab.id === snapshot.tab ? "bg-neutral-100 text-black" : "bg-[#080808] text-neutral-300 hover:bg-neutral-950 hover:text-neutral-100"
+                tab.id === snapshot.tab ? "bg-neutral-100 text-black shadow-[inset_0_-2px_0_#ffffff]" : "bg-[#080808] text-neutral-300 hover:bg-neutral-950 hover:text-neutral-100"
               }`}
             >
               {tab.label}
@@ -264,7 +264,7 @@ export function DashboardShell({
           ))}
         </nav>
 
-        <section className="border-l border-neutral-700 bg-[#080808] px-3 py-2">
+        <section className="border border-neutral-800 bg-[#080808]/95 px-3 py-2 shadow-[inset_2px_0_0_rgba(212,212,212,0.35)]">
           <p className="max-w-6xl text-sm leading-6 text-neutral-400">{snapshot.objective}</p>
         </section>
 
@@ -281,7 +281,7 @@ export function DashboardShell({
           </section>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-neutral-900/90 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-neutral-900/90 bg-black/20 px-1 py-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={() => setExpanded(new Set(allPanelIds))}>
               <ChevronDownSquare className="h-4 w-4" />
