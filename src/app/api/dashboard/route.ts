@@ -4,7 +4,7 @@ import { computeStats } from "@/lib/data/analytics";
 import { buildCachedDashboardSnapshot, buildDashboardSnapshot } from "@/lib/data/engine";
 import { getSupabaseAdmin } from "@/lib/data/supabase";
 import type { DashboardSnapshot, Observation, PanelSnapshot, SeriesResult, WindowKey } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
+import { formatMetricNumber, formatNumber } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,7 +106,7 @@ function conclusionForPanel(panel: PanelSnapshot) {
   const changeText = change === undefined
     ? "freshness is available but change history is limited"
     : `${change >= 0 ? "+" : ""}${formatNumber(change, unit)} on the relevant lookback`;
-  return `${panel.title}: ${topMetric.config.label} is ${formatNumber(topMetric.stats.latest, topMetric.config.unit)} as of ${topMetric.stats.latestDate}; ${changeText}.`;
+  return `${panel.title}: ${topMetric.config.label} is ${formatMetricNumber(topMetric)} as of ${topMetric.stats.latestDate}; ${changeText}.`;
 }
 
 function refreshPanelDerivedState(panel: PanelSnapshot): PanelSnapshot {
