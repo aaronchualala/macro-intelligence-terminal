@@ -136,30 +136,30 @@ export function MacroPanel({
 }) {
   return (
     <article
-      className={`relative overflow-hidden border border-neutral-800/90 bg-[#080808] shadow-[0_0_0_1px_rgba(255,255,255,0.015),0_18px_42px_rgba(0,0,0,0.28)] transition-colors hover:border-neutral-600 ${
+      className={`relative overflow-hidden rounded-sm border border-neutral-800/90 bg-[#080808] shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_18px_42px_rgba(0,0,0,0.32)] transition-[border-color,box-shadow,background-color] duration-150 hover:border-neutral-600 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.035),0_22px_54px_rgba(0,0,0,0.38)] ${
         depth ? "bg-[#070707]" : ""
       }`}
     >
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-neutral-500/45" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-neutral-400/45" />
       <button
         type="button"
         onClick={() => onToggle(panel.id)}
         aria-expanded={expanded}
-        className="group grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 p-4 text-left transition hover:bg-[#0d0d0d] md:grid-cols-[auto_minmax(0,1fr)_220px] md:p-5"
+        className="group grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 p-4 text-left transition hover:bg-[#0d0d0d] md:grid-cols-[auto_minmax(0,1fr)_230px] md:p-5"
       >
-        <div className="mt-0.5 grid h-8 w-8 place-items-center border border-neutral-800 bg-black text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition group-hover:border-neutral-500 group-hover:text-neutral-100">
+        <div className="mt-0.5 grid h-8 w-8 place-items-center rounded-sm border border-neutral-800 bg-black text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_20px_rgba(0,0,0,0.24)] transition group-hover:border-neutral-500 group-hover:text-neutral-100">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span
-              className="inline-flex h-5 items-center border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-400"
+              className="inline-flex h-5 items-center rounded-[2px] border border-neutral-800 bg-black px-1.5 text-[11px] leading-none text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
               title={importanceExplanation(panel)}
             >
               Current Importance {importanceScore(panel.importance)} / 10
             </span>
             <span
-              className="inline-flex h-5 max-w-full items-center border border-neutral-800 bg-neutral-950 px-1.5 text-[10px] font-medium uppercase leading-none tracking-wide text-neutral-400"
+              className="inline-flex h-5 max-w-full items-center rounded-[2px] border border-neutral-800 bg-neutral-950 px-1.5 text-[10px] font-medium uppercase leading-none tracking-wide text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
               title={regimeExplanation(panel)}
             >
               Regime {panel.regime}
@@ -174,7 +174,7 @@ export function MacroPanel({
             {panel.summary}
             {panel.description ? <span> {panel.description}</span> : null}
           </p>
-          <div className="mt-3 border-l border-neutral-700 bg-black/25 py-2 pl-3">
+          <div className="mt-3 rounded-r-sm border-l border-neutral-700 bg-black/25 py-2 pl-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
             {panel.methodology ? (
               <p className={`text-[11px] leading-5 text-neutral-400 ${expanded ? "" : "line-clamp-2"}`}>
                 <span className="uppercase tracking-wide text-neutral-400">Methodology </span>
@@ -185,7 +185,7 @@ export function MacroPanel({
         </div>
         <div className="col-span-2 min-w-[190px] self-center text-left md:col-span-1 md:text-right">
           <div className="mb-2 flex md:justify-end">
-            <Badge className="normal-case text-[11px]" title={dataAvailabilityExplanation(panel)}>
+            <Badge className="normal-case text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]" title={dataAvailabilityExplanation(panel)}>
               {dataAvailabilityLabel(panel.confidence)}
             </Badge>
           </div>
@@ -202,12 +202,12 @@ export function MacroPanel({
             transition={{ duration: 0.16 }}
             className="overflow-hidden border-t border-neutral-800"
           >
-            <div className="grid gap-3 p-3 md:p-4">
+            <div className="grid gap-3 bg-[#050505]/70 p-3 md:p-4">
               <MetricTable metrics={panel.metrics} />
               <ScenarioTree panel={panel} />
               <CorrelationBlock panel={panel} />
               {panel.actors.length || panel.catalysts.length ? (
-                <div className="grid gap-px overflow-hidden border border-neutral-800 bg-neutral-800 md:grid-cols-2">
+                <div className="grid gap-px overflow-hidden rounded-sm border border-neutral-800 bg-neutral-800 md:grid-cols-2">
                   <div className="bg-[#080808] p-3">
                     <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Actors / constraints</div>
                     <div className="flex flex-wrap gap-1">
